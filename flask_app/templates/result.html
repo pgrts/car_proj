@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { width: 70%; margin: auto; text-align: center; padding: 20px; }
+        .data { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        .data th, .data td { border: 1px solid #ddd; padding: 4px; }
+        .data th { background-color: #f2f2f2; }
+        img { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Depreciation Curve</h1>
+        <img src="data:image/png;base64,{{ plot_url }}" alt="Depreciation Curve">
+        
+        <h2>Results</h2>
+        <div>{{ results|safe }}</div>
+
+        <h2>Similar Vehicles</h2>
+        {% if similar_vehicles is not none %}
+            <div>{{ similar_vehicles.to_html(index=False, classes='data')|safe }}</div>
+        {% else %}
+            <p>No similar vehicles found.</p>
+        {% endif %}
+        
+        <a href="/">Search Again</a>
+    </div>
+</body>
+</html>

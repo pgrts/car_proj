@@ -1,18 +1,28 @@
-<!DOCTYPE html> 
-
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prediction Result</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <title>Vehicle Search</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { width: 50%; margin: auto; text-align: center; padding: 20px; }
+        input[type="text"] { width: 80%; padding: 10px; margin: 5px 0; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center">Prediction Result</h1>
-        <p class="text-center">You entered: {{ details }}</p>
-        <h2 class="text-center">Predicted Price: {{ price }}</h2>
-        <a href="/" class="btn btn-primary d-block mx-auto">Back</a>
+        <h1>Search Vehicles</h1>
+        <form method="POST">
+            <input type="text" name="vin" placeholder="Enter VIN">
+            <button type="submit" name="action" value="search_by_vin">Search by VIN</button>
+            
+            <input type="text" name="make_model_year" placeholder="Enter Make Model and Year">
+            <button type="submit" name="action" value="search_by_make_model_year">Search by Make/Model/Year</button>
+        </form>
+        
     </div>
 </body>
 </html>
