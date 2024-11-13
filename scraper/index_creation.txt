@@ -1,0 +1,9 @@
+CREATE INDEX idx_car_data_vin_link ON car_data (vin, link);
+CREATE INDEX idx_big_rejects_vin_link ON big_rejects (vin, link);
+
+CREATE INDEX idx_big_rej_price ON "big_rejects" (price);
+CREATE INDEX idx_car_data_price ON car_data (price);
+
+CREATE INDEX idx_new_data_vin_link ON new_data_2024_11_07 (vin, link);
+CREATE INDEX idx_car_data_vin_link ON car_data (vin, link);
+CREATE INDEX idx_big_rejects_vin_link ON big_rejects (vin, link);

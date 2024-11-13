@@ -1,0 +1,21 @@
+CREATE TABLE "big_rejects" AS 
+WITH combined_data AS (
+    SELECT 
+        COALESCE(l."odometer", -1) AS "odometer",  -- Keep odometer as integer
+        l."posting_date", 
+        l."lat", 
+        l."long", 
+        l."geo_placename", 
+        l."geo_region", 
+        l."postingbody", 
+        l."title", 
+        l."link", 
+        l."vin",
+        k."date_scraped",
+         CAST(ROUND(CAST(REPLACE(REPLACE(k.price, '$', ''), ',', '') AS NUMERIC)) AS INTEGER) AS price, 
+        k.location, 
+        k.region_url
+    FROM links_rejected k
+    FULL OUTER JOIN listings_rejected l on k."link" = l."link"
+) 
+SELECT * FROM combined_data;

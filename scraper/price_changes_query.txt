@@ -1,0 +1,12 @@
+CREATE TABLE "price_changes" AS
+SELECT 
+	n.price::Integer as "new_price", 
+	b.price as "old_price", 
+	n.posting_date as "new_posting_date", 
+	b.posting_date as "old_posting_date",
+	n.vin, n.link as "new_link", 
+	b.link as "old_link",
+	b.date_scraped
+FROM "car_data" n
+JOIN big_rejects b ON n.vin = b.vin
+WHERE n.price::INTEGER != b.price::INTEGER;

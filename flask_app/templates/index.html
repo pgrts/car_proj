@@ -22,7 +22,63 @@
             <input type="text" name="make_model_year" placeholder="Enter Make Model and Year">
             <button type="submit" name="action" value="search_by_make_model_year">Search by Make/Model/Year</button>
         </form>
-        
+        <!-- Good Listings Section -->
+        <h2>Top 25 Listings</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Model Year</th>
+                    <th>Make</th>
+                    <th>Model</th>
+                    <th>Price</th>
+                    <th>Value</th>
+                    <th>Dollars Saved</th>
+                    <th>Link</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for listing in good_listings %}
+                <tr>
+                    <td>{{ listing.modelyear }}</td>
+                    <td>{{ listing.make }}</td>
+                    <td>{{ listing.model }}</td>
+                    <td>{{ listing.price }}</td>
+                    <td>{{ listing.predicted_price }}</td>
+                    <td>{{ listing.new_resid }}</td>
+                    <td><a href="{{ listing.link }}" target="_blank">View Listing</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Bad Listings Section -->
+        <h2>Bottom 25 Listings</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Model Year</th>
+                    <th>Make</th>
+                    <th>Model</th>
+                    <th>Price</th>
+                    <th>Value</th>
+                    <th>Dollars Wasted</th>
+                    <th>Link</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for listing in bad_listings %}
+                <tr>
+                    <td>{{ listing.modelyear }}</td>
+                    <td>{{ listing.make }}</td>
+                    <td>{{ listing.model }}</td>
+                    <td>{{ listing.price }}</td>
+                    <td>{{ listing.predicted_price }}</td>
+                    <td>{{ listing.new_resid }}</td>
+                    <td><a href="{{ listing.link }}" target="_blank">View Listing</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </body>
 </html>
