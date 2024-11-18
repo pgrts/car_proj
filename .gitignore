@@ -1,3 +1,5 @@
 *.csv
 .env
 table_backups/
+flask_app/venv/
+cb_models/

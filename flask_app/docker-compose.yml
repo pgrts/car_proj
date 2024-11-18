@@ -1,10 +1,25 @@
-version: '3.4'
-
+version: "3.8"
 services:
-  flaskapp:
-    image: flaskapp
-    build:
-      context: .
-      dockerfile: ./Dockerfile
+  app:
+    build: .
+    image: car_dock
     ports:
-      - 3000:3000
+      - "5000:5000"
+    depends_on:
+      - db
+    environment:
+      - DB_PASSWORD=kylemanjaro420!!  # Replace with your .env stored password or set securely
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}  # Match with the DB_PASSWORD in app service
+      POSTGRES_DB: cars
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:

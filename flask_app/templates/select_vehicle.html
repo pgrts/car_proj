@@ -18,11 +18,11 @@
             </tr>
             {% for index, row in matches.iterrows() %}
             <tr>
-                <td>{{ row.Series }}</td>
-                <td>{{ row.Trim }}</td>
-                <td>{{ row.DriveType }}</td>
-                <td>{{ row.DisplacementCC }}</td>
-                <td>{{row.FuelTypePrimary}}</td>
+                <td>{{ row.series }}</td>
+                <td>{{ row.trim }}</td>
+                <td>{{ row.drivetype }}</td>
+                <td>{{ row.displacementcc }}</td>
+                <td>{{row.fueltypeprimary}}</td>
                 <td><button type="submit" name="selected_idx" value="{{ index }}">Select</button></td>
             </tr>
             {% endfor %}

@@ -340,7 +340,7 @@ def clean_listing_output(df2, datestr):
     # Filter listings with valid VIN and odometer
     valid_df = df[(df['vin'].notnull()) & 
                   (df['vin'].str.len() == 17) & 
-                  (df['odometer'].between(25000, 310000))]
+                  (df['odometer'].between(15000, 400000))]
     reject_df = df[~df.index.isin(valid_df.index)]  # Entries that don't meet criteria
 
     return valid_df, reject_df
@@ -384,10 +384,33 @@ def divert_price(valid_df, reject_df, big_rej_df, match_col='vin'):
     else:
         return valid_df, reject_df
   
-def all_col_vals(tablename, engine, col= 'vin'):
-    return pd.read_sql(f'SELECT DISTINCT {col} FROM {tablename}', con=engine)[col].drop_duplicates().tolist()
+def all_col_vals(tablename, conn, col= 'vin'):
+    quer = text(f'SELECT DISTINCT {col} FROM {tablename}')
+    return pd.read_sql(quer, conn)[col].tolist()
+def log_to_file(file_path, string_to_append):
+    try:
+        with open(file_path, 'a') as file:
+            file.write(string_to_append + '\n')
+        print(f"Successfully appended to {file_path}")
+    except Exception as e:
+        print(f"Error appending to file: {e}")
 
-mod_ints = ['price', 'odometer', 'modelyear', 'state_income', 'days_since']
+def load_mod_ints(file_path):
+    mod_ints = []
+    try:
+        with open(file_path, 'r') as file:
+            for line in file:
+                mod_ints.append(line.strip())  # .strip() removes the trailing newline
+    except FileNotFoundError:
+        # If the file doesn't exist, return an empty list
+        mod_ints = []
+    return mod_ints
+
+pred_col_file = os.path.join(os.getcwd(), '..', 'pred_cols.txt')
+pred_cols = ['pred_' + x for x in load_mod_ints(pred_col_file)]
+mod_ints = ['price', 'odometer', 'modelyear', 'state_income', 'days_since'] + pred_cols
+print(mod_ints)
+
 mod_texts = ['dynamicbrakesupport',
  'edr',
  'esc',
@@ -467,7 +490,6 @@ mod_texts = ['dynamicbrakesupport',
  'turbo',
  'title',
  'link'] + ['location', 'drive', 'type', 'title_status', 'transmission', 'fuel', 'region_url', 'geo_placename', 'vin']
-
 mod_floats = ['trackwidth',
  'baseprice',
  'batterykwh',
@@ -493,7 +515,49 @@ mod_floats = ['trackwidth',
  'wheels',
  'windows',
  'doors']
+mod_dts = ['reference_date', 'date_scraped', 'posting_date']
 
+def latest_cbm_f():
+    
+    cbm_files =  os.listdir(os.path.join(os.getcwd(), '..', 'cb_models'))
+    cbm_dates = [x.lstrip('cb_model_').rstrip('.cbm') for x in cbm_files]
+    latest_file = [x for x in cbm_files if max(cbm_dates) in x]
+
+    return os.path.join(os.getcwd(), '..', 'cb_models', get_first(latest_file))  
+
+def abse(df, lb=-25000, ub=25000):
+    return (df['error'] < lb) | (df['error'] > ub)
+    
+def create_preds(df, model, pred_col):
+    #load df, load model
+    df[pred_col] = model.predict(model_prep(df[cats+nums])).round().astype(int)
+    df['error'] = df[pred_col] - df['price']
+    df['error_percent'] = df['error'] / df['price']
+    return df
+
+def epm(df, lb=-1, ub=1.5):
+    return (df['error_percent'] < lb) | (df['error_percent'] > ub)
+    
+def divert_outliers(df):
+
+    latest_cbb = latest_cbm_f()
+    model_sfx = '_' + latest_cbb.lstrip(os.path.join(os.getcwd(), '..', 'cb_models')).rstrip('.cbm')
+
+    cbb = CatBoostRegressor()
+    cbb.load_model(latest_cbm_f())
+
+    df = create_preds(df, cbb, 'pred' + model_sfx)
+    
+    epm_msk = epm(df)
+    abse_mask = abse(df)
+    
+    combined_mask = epm_msk | abse_mask
+
+    # Select rows based on the combined mask
+    good_df = df[~combined_mask]
+    bad_df = df[combined_mask]
+
+    return good_df, bad_df
 
 def prep_cd_sql(df, int_cols, float_cols, text_cols, dt_cols=['reference_date', 'date_scraped', 'posting_date']):
 
@@ -525,16 +589,16 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                   
     #engine = create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}')
     
-    datestr_sql = datestr.replace('-', '_')
+    datestr_sql = '_' + datestr.replace('-', '_')
 
-    backup_tablename = main_data + '_' + datestr_sql
-    links_accepted = 'links_accepted_' + datestr_sql
-    links_rejected = 'links_rejected_' + datestr_sql
-    listings_accepted = 'listings_accepted_' + datestr_sql    
-    listings_rejected = 'listings_rejected_' + datestr_sql
-    vins_accepted = 'vins_accepted_' + datestr_sql   
-    vins_rejected = 'vins_rejected_' + datestr_sql
-    initial_scrape = 'scrape_results_' + datestr_sql
+    backup_tablename = main_data + datestr_sql
+    links_accepted = 'links_accepted' + datestr_sql
+    links_rejected = 'links_rejected' + datestr_sql
+    listings_accepted = 'listings_accepted' + datestr_sql    
+    listings_rejected = 'listings_rejected' + datestr_sql
+    vins_accepted = 'vins_accepted' + datestr_sql   
+    vins_rejected = 'vins_rejected' + datestr_sql
+    initial_scrape = 'scrape_results' + datestr_sql
 
     backup_query = f"""
     CREATE TABLE "{backup_tablename}" AS
@@ -547,10 +611,12 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
         WHERE table_name = '{backup_tablename}'
     );
     """
+
     try:
         with engine.connect() as conn:
             
             result = conn.execute(text(check_query)).fetchone()
+
             if result[0]:  # If the table exists
                 print(f"Backup table '{backup_tablename}' already exists. Skipping creation.")
             else:
@@ -561,26 +627,17 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                 
             print(f"Reading data from table '{main_data}'...")
 
-            backup_df = pd.read_sql(f'SELECT "link", "vin", "price" FROM "{main_data}";', conn)[['link','vin', 'price']]
+            main_query = text(f'''SELECT "link", "vin", "price" FROM "{main_data}";''')
+            rj_query = text(f'''SELECT "link", "vin", "price" FROM "{big_rejects}";''')
+
+            backup_df = pd.read_sql(main_query, conn)
+            big_rej_df =  pd.read_sql(rj_query, conn)
 
             reg_ref_df = pd.read_sql(reg_ref, conn)      
-            '''
-            check_link_query = f"""
-            SELECT EXISTS (
-                SELECT 1 
-                FROM information_schema.tables 
-                WHERE table_name = '{links_accepted}'
-            );
-            """
-            result = conn.execute(text(check_link_query)).fetchone()
-            '''
-            print("Fetching already rejected links...")
-
-            big_rej_df =  pd.read_sql(f'SELECT "link", "price", "vin" FROM {big_rejects}', engine)
 
             if table_exists_engine(initial_scrape, engine):
                 print(f'{initial_scrape} exists. Skipping Scrape')
-                full_scrape = pd.read_sql(initial_scrape, engine)
+                full_scrape = pd.read_sql(initial_scrape, conn)
             else:
                 print(f'starting scrape to {initial_scrape}')
                 full_scrape = pd.concat(scrape_regions(reg_ref_df))
@@ -589,7 +646,7 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                     return 
                 else:
                     print(f'{initial_scrape} created. scrape proceeds')
-                    full_scrape.to_sql(initial_scrape, engine, index=False)
+                    full_scrape.to_sql(initial_scrape, conn, index=False)
 
             if full_scrape.empty:
                 print("Error: full_scrape is empty after initialization.")
@@ -598,7 +655,7 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
             if table_exists_engine(links_accepted, engine):
                 print(f'{links_accepted} exists. Skipping split')
             else:
-                df1, df2 = clean_mask_price(full_scrape, 1000, 151000)
+                df1, df2 = clean_mask_price(full_scrape, 1000, 175000)
 
                 if df1.empty or df2.empty:
                     print("Error: The DataFrame (df1 or df2) is empty.")
@@ -656,8 +713,8 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                 conn.commit()
                 print(f"Created the listing target table '{listings_rejected}'.")
             else:
-                all_links.extend(all_col_vals(listings_rejected, engine, col='link'))
-                all_vins.extend(all_col_vals(listings_rejected, engine, col='vin'))
+                all_links.extend(all_col_vals(listings_rejected, conn, col='link'))
+                all_vins.extend(all_col_vals(listings_rejected, conn, col='vin'))
                 print(f"The listing target table '{listings_rejected}' already exists.")       
 
             if not table_exists(listings_accepted, conn):
@@ -667,7 +724,7 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                 conn.commit()
                 print(f"Created the listing target table '{listings_accepted}'.")
             else:
-                all_links.extend(all_col_vals(listings_accepted, engine, col='link'))
+                all_links.extend(all_col_vals(listings_accepted, conn, col='link'))
                 print(f"The listing target table '{listings_accepted}' already exists.")                                              
             
             # Check and create good VIN table if it doesn't exist
@@ -678,7 +735,7 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                 print(f"Created the good VIN table '{vins_accepted}'.")
                 conn.commit()
             else:
-                all_vins.extend(all_col_vals(vins_accepted, engine, col='vin'))
+                all_vins.extend(all_col_vals(vins_accepted, conn, col='vin'))
                 print(f"The good VIN table '{vins_accepted}' already exists.")
 
             if not table_exists(vins_rejected, conn):
@@ -688,32 +745,36 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                 print(f"Created the good VIN table '{vins_rejected}'.")
                 conn.commit()
             else:
-                all_vins.extend(all_col_vals(vins_rejected, engine, col='vin'))
+                all_vins.extend(all_col_vals(vins_rejected, conn, col='vin'))
                 print(f"The good VIN table '{vins_rejected}' already exists.")                
     
             # TODO: Refactor, This could be done above using def all_col_vals with else:
             if table_exists_engine(listings_accepted, engine):
-                listing_links = pd.read_sql(f"SELECT link FROM {listings_accepted};", engine)['link'].tolist()
+                list_acc_quer = text(f"SELECT link FROM {listings_accepted};")
+                listing_links = pd.read_sql(list_acc_quer, conn)['link'].tolist()
                 all_links.extend(listing_links)
             else:
                 print('all links not extended ' + f'{listings_accepted} does not exist')
                 return False
 
             if table_exists_engine(links_rejected, engine):
-                r_links = pd.read_sql(f"SELECT link FROM {links_rejected};", engine)['link'].tolist()
+                link_rej_quer = text(f"SELECT link FROM {links_rejected};")
+                r_links = pd.read_sql(link_rej_quer, conn)['link'].tolist()
                 all_links.extend(r_links)
             else:
                 print('all links not extended ' + f'{links_rejected} does not exist')
                 return False
 
             if table_exists_engine(listings_rejected, engine):
-                r_listings = pd.read_sql(f"SELECT link FROM {listings_rejected};", engine)['link'].tolist()
+                list_rej_quer = text(f"SELECT link FROM {listings_rejected};")
+                r_listings = pd.read_sql(list_rej_quer, conn)['link'].tolist()
                 all_links.extend(r_listings)
             else:
                 print('all links not extended ' + f'{listings_rejected} does not exist')
                 return False
 
-            link_source_df = pd.read_sql(f'SELECT DISTINCT link, price FROM {links_accepted}', engine)
+            link_source_quer = text(f'SELECT DISTINCT link, price FROM {links_accepted}')
+            link_source_df = pd.read_sql(link_source_quer, conn)
             remaining_link_df = link_source_df[~link_source_df['link'].isin(all_links)][['link', 'price']]
             print(f"Found {len(remaining_link_df)} remaining links to process.")
 
@@ -745,16 +806,15 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                         
 
                         vin = valid_df.at[0, 'vin']
-                        
-                        #temporarily mask by first 16 chars
+
                         if (vin not in vin_batch) and (vin not in all_vins):
-                            valid_df.to_sql(listings_accepted, con=conn, if_exists='append', index=False)
+                            valid_df.to_sql(listings_accepted, con=engine, if_exists='append', index=False)
                             vin_batch.append(vin)
                             print(f"VIN added to batch: {vin}")
                             print(f"Current batch size: {len(vin_batch)}")
                         else:
                             print(f"VIN already in database: {vin}, adding to {listings_rejected}")
-                            valid_df.to_sql(listings_rejected, con=conn, if_exists='append', index=False)
+                            valid_df.to_sql(listings_rejected, con=engine, if_exists='append', index=False)
 
                         # Process batch if full
                         if len(vin_batch) == 50:
@@ -765,7 +825,7 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                     # Insert rejected listings
                     if not reject_df.empty:
                         reject_df = reject_df.drop(columns='price')
-                        reject_df.to_sql(listings_rejected, con=conn, if_exists='append', index=False)
+                        reject_df.to_sql(listings_rejected, con=engine, if_exists='append', index=False)
                         print(f"Added reject records to {listings_rejected}")
 
                 print(f"Processed link: {link}")
@@ -784,7 +844,8 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
 
     return True
 
-def reject_more_values(gd_links, bd_links, gd_listings, bd_listings, gd_vins, reg_ref, new_table_name, engine, big_reg = "big_rejects", main_data = 'car_data'):
+def reject_more_values(gd_links, bd_links, gd_listings, bd_listings, gd_vins, reg_ref, new_table_name, engine, 
+        big_reg = "big_rejects", main_data = 'all_cars'):
     logging.basicConfig(level=logging.INFO)
     try:
         with engine.connect() as conn:
@@ -942,14 +1003,15 @@ def reject_more_values(gd_links, bd_links, gd_listings, bd_listings, gd_vins, re
                 
                 # Execute the SELECT statement and store the result in a DataFrame
                 result_df = pd.read_sql(text(f'''
-                    SELECT n.price AS "new_price", 
+                    SELECT DISTINCT n.price AS "new_price", 
                         b.price AS "old_price", 
                         n.posting_date AS "new_posting_date", 
                         b.posting_date AS "old_posting_date",
                         n.vin, 
                         n.link AS "new_link", 
                         b.link AS "old_link",
-                        n.date_scraped
+                        n.date_scraped as "new_date_scraped",
+                        b.date_scraped as "old_date_scraped"
                     FROM {new_table_name} n
                     JOIN {main_data} b ON (n.vin = b.vin)
                     WHERE n.price != b.price
@@ -969,15 +1031,18 @@ def reject_more_values(gd_links, bd_links, gd_listings, bd_listings, gd_vins, re
             
             try:
                 # Read from the source table
-                df = pd.read_sql(f"SELECT * FROM {new_table_name};", conn)
-        
-                prep_cd_sql(df, mod_ints, mod_floats, mod_texts).to_sql(main_data, engine, index=False, if_exists='append')
+                query = text(f"""SELECT * FROM {new_table_name};""")
+                df = pd.read_sql(query, conn)
+                print(len(df))
+                df2 = prep_cd_sql(df, mod_ints, mod_floats, mod_texts)
+                print([x for x in df2.columns if x not in df.columns])
+                gdf, bdf = divert_outliers(df2)
 
-                # Write to the target table
-                #df_good.to_sql(main_data, engine, index=False, if_exists='append')
-                #df_bad.to_sql(main_data + '_rejects', engine, index=False, if_exists='append')
-                
-                print(f"{len(df)} rows added from {new_table_name} to {main_data}.")
+                gdf[mod_ints+mod_floats+mod_texts+mod_dts].to_sql(main_data, engine, index=False, if_exists='append')
+                bdf[mod_ints+mod_floats+mod_texts+mod_dts].to_sql((main_data + '_outliers'), engine,  index=False, if_exists='append')
+
+                print(f"{len(gdf)} rows added from {new_table_name} to {main_data}.")
+                print(f"{len(bdf)} rows added from {new_table_name} to {main_data}_outliers.")
             except Exception as e:
                 # Log or print an error if the operation fails
                 logging.error(f"Failed to append data to {main_data}: {e}")
@@ -1033,7 +1098,6 @@ def backup_and_cleanup_database(source_db_url, backup_db_url, subst='_2024_'):
                     logging.info(f"Deleted table {table_name} from source database after backup.")
                     print(f"Successfully deleted table {table_name} from source database.")
 
-            
     except Exception as e:
         logging.error(f"An error occurred during the backup process: {e}")
         print(f"Error: {e}")
@@ -1099,94 +1163,32 @@ def model_prep(df2):
     df2[nums] = df2[nums].astype('float64')
     return df2
 
-def rmse(df):
-    return root_mean_squared_error(df['pred'], df['price'])
+def rmse(df, pred_col):
+    return root_mean_squared_error(df[pred_col], df['price'])
 
 def get_first(ls):
     if (len(ls) == 1):
         return ls[0]
     else: 
         return get_first(list(set(ls)))
-    
-def latest_cbm():
-    
-    cbm_files =  os.listdir(os.path.join(os.getcwd(), 'cb_models'))
-    cbm_dates = [x.lstrip('cb_model_').rstrip('.cbm') for x in cbm_files]
-    latest_file = [x for x in cbm_files if max(cbm_dates) in x]
 
-    return os.path.join(os.getcwd(), 'cb_models', get_first(latest_file)) 
-
-def detect_down_payments(df, mult = 1.5, add=1500):
+def detect_down_payments(df, pred_col, mult = 1.5, add=1500):
     #(df.odometer < 250000) & (df['modelyear'] > 2000) & (df['price'] < 10000) & 
-    down_payments_likely = (df['pred'] > ((mult * df['price']) + add))
+    down_payments_likely = (df[pred_col] > ((mult * df['price']) + add))
     return df[~down_payments_likely], df[down_payments_likely]
     
-'''
-# Find Vehicles that have significant modifications that lead to a hire list price
-# 150% higher price than predicted, price higher than $15,000
-def op_mask(df, mult=1.5, add=1500):
-    return (((df['pred'] * mult) + add) < df['price'])
+def retrain_model(df, string1, file_path):
+    # Retrain the model (example)
+    # Perform operations with the dataframe...
     
-def validate_model_procedure(df, mult=1.5, add=1500, mult2=1.5, add2=1500, model=None):#, engine, datestr):
-    df = model_prep(df)
+    # Log the operation to the file
+    log_to_file(file_path, string1)
 
-    # STEP 2: LOAD OLDEST MODEL
-    cb1 = CatBoostRegressor()
-   
-    if model:
-        try:
-            cb1.load_model(model)
-        except:
-            print('error ' + model + ' not found')
-            return
-    else:
-        try:
-            cb1.load_model(latest_cbm())
-        except:
-            print('error loading ' + latest_cbm())
-            return
-    
-    y_pred = cb1.predict(df[cats+nums])
-    df['pred'] =  np.round(y_pred).astype(int)
 
-    length_1 = len(df)
-    rmse_1 = rmse(df)
-
-    df1, df2 = detect_down_payments(df,mult=mult, add=add)
-    length_2 = len(df1)
-    rmse_2 = rmse(df1)
-
-    # error has increased, switch to op_mask with original_data
-    if rmse_2 > rmse_1:
-        df11 = df[~op_mask(df,mult=mult2, add=add2)]
-        df12 = df[op_mask(df,mult=mult2, add=add2)]
-        length_3 = len(df11)
-        rmse_3 = rmse(df11)  
-        
-    # error as decreased, stay with df1, df2
-    elif rmse_1 > rmse_2:
-        df11 = df1[~op_mask(df1, mult=mult2, add=add2)]
-        df12 = pd.concat([df2, df1[op_mask(df1,mult=mult2, add=add2)]])
-        length_3 = len(df11)
-        rmse_3 = rmse(df11)
-    else:
-        rmse_3 = rmse_1
-        length_3 = length_1
-    
-
-    if rmse_3 > rmse_1:
-        return df, pd.DataFrame(columns=df.columns), {length_1: rmse_1, length_2: rmse_2, length_3:rmse_3}
-    elif rmse_3 < rmse_1:
-        return df11, df12, {length_1: rmse_1, length_2: rmse_2, length_3:rmse_3}
-    else:
-        return df, pd.DataFrame(columns=df.columns), {length_1: rmse_1, length_2: rmse_2, length_3:rmse_3}
-
- '''       
-
-def dump_backup(user='postgres', password=db_password, host='localhost', port='5432', db_name='cars', substring='_2024_'):
-
+def dump_backup(user='postgres', password=db_password, host='localhost', port='5432', db_name='cars', substring='_2024_', delete_after_backup=False):
     backup_dir = os.path.abspath(os.path.join(os.getcwd(), '..', 'table_backups'))
-    
+    os.makedirs(backup_dir, exist_ok=True)  # Ensure backup directory exists
+
     # Create a SQLAlchemy engine
     engine = create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}')
 
@@ -1201,7 +1203,7 @@ def dump_backup(user='postgres', password=db_password, host='localhost', port='5
         # Fetch all matching table names as a list
         tables = [row['tablename'] for row in result.mappings()]
         print("Tables to back up:", tables)
-    
+
     for table in tables:
         backup_file = os.path.join(backup_dir, f"{table}.dump")
         print(f"Backing up table {table} to {backup_file}...")
@@ -1216,41 +1218,47 @@ def dump_backup(user='postgres', password=db_password, host='localhost', port='5
             "-t", table, "-Fc", "-f", backup_file
         ], check=True, env=env)
 
-    print("Backup completed.")
+        print(f"Backup of table {table} completed.")
 
-dump_backup(substring='car_data')
+        # Delete the table after backup if delete_after_backup is set to True
+        if delete_after_backup:
+            with engine.connect() as connection:
+                connection.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
+                connection.commit()  # Commit deletion
+                print(f"Table {table} deleted after backup.")
+
+    print("Backup process completed.")
+
+
+#datestr = '2024-11-18'
+#datestr_sql = '_' + datestr.replace('-', '_')
+#source_db_url = f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars'
+#backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'
+#backup_zip_path = f'C:\\Users\\pgrts\\Desktop\\python\\car_proj\\scraper\\backup{datestr}.zip'
+#engine = create_engine(source_db_url)
+
+#main_data = 'all_cars'
+
 
 '''
-datestr = '2024-11-12'
-datestr_sql = '_' + datestr.replace('-', '_')
-source_db_url = f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars'
-backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'
-backup_zip_path = f'C:\\Users\\pgrts\\Desktop\\python\\car_proj\\scraper\\backup{datestr}.zip'
-engine = create_engine(source_db_url)
-
-main_data = 'big_car_d'
-
 if do_lots_stuff(main_data, datestr, engine):
     print('initial scrape complete. tables created')
-    if reject_more_values(
-        'links_accepted' + datestr_sql, 
+    if reject_more_values('links_accepted' + datestr_sql, 
         'links_rejected' + datestr_sql, 
         'listings_accepted' + datestr_sql, 
         'listings_rejected' + datestr_sql, 
         'vins_accepted' + datestr_sql, 
         'region_reference', 
-        'new_data' + datestr_sql, engine):
+        'new_data' + datestr_sql, engine,
+            main_data = main_data):
         print('reject complete')
-        if backup_and_cleanup_database(source_db_url, backup_db_url):
-            print('backedup')
-            if backup_and_cleanup_database2(backup_db_url, backup_zip_path):
-                engine.dispose()  # Ensure that the engine is disposed even if an error occurs
+        dump_backup(substring='_2024_', delete_after_backup=True)
 
-    
+   
 backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'
 backup_zip_path = f'C:\\Users\\pgrts\\Desktop\\python\\car_proj\\scraper\\backup{datestr}.zip'
 if backup_and_cleanup_database(source_db_url, backup_db_url):
     backup_and_cleanup_database2(backup_db_url, backup_zip_path)
 
 engine.dispose()  # Ensure that the engine is disposed even if an error occurs
-'''
+''' 

@@ -32,7 +32,8 @@
                     <th>Model</th>
                     <th>Price</th>
                     <th>Value</th>
-                    <th>Dollars Saved</th>
+                    <th>Savings</th>
+                    <th>State</th>
                     <th>Link</th>
                 </tr>
             </thead>
@@ -45,6 +46,7 @@
                     <td>{{ listing.price }}</td>
                     <td>{{ listing.predicted_price }}</td>
                     <td>{{ listing.new_resid }}</td>
+                    <td>{{ listing.state }}</td>
                     <td><a href="{{ listing.link }}" target="_blank">View Listing</a></td>
                 </tr>
                 {% endfor %}
@@ -61,7 +63,8 @@
                     <th>Model</th>
                     <th>Price</th>
                     <th>Value</th>
-                    <th>Dollars Wasted</th>
+                    <th>Wastings</th>
+                    <th>State</th>
                     <th>Link</th>
                 </tr>
             </thead>
@@ -74,6 +77,7 @@
                     <td>{{ listing.price }}</td>
                     <td>{{ listing.predicted_price }}</td>
                     <td>{{ listing.new_resid }}</td>
+                    <td>{{ listing.state }}</td>
                     <td><a href="{{ listing.link }}" target="_blank">View Listing</a></td>
                 </tr>
                 {% endfor %}

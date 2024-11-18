@@ -137,7 +137,6 @@ def latest_cbm_f():
     latest_file = [x for x in cbm_files if max(cbm_dates) in x]
 
     return os.path.join(os.getcwd(), '..', 'cb_models', get_first(latest_file))    
- 
 
 def model_prep(df2):
     df2[cats] = df2[cats].astype(str)
@@ -146,10 +145,12 @@ def model_prep(df2):
     
 # Load the dataframe of vehicle data for finding similar vehicles
 engine = create_engine(f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars')
-df_vehicles = pd.read_sql('car_data', engine)
-cb72 = CatBoostRegressor()
-cb72.load_model(latest_cbm_f())
+df_vehicles = pd.read_sql('all_cars', engine)
 
+cb72 = CatBoostRegressor()
+latest_cbb = latest_cbm_f()
+model_sfx = '_' + latest_cbb.lstrip(os.path.join(os.getcwd(), '..', 'cb_models')).rstrip('.cbm')
+cb72.load_model(latest_cbb)
 
 def get_json(url):
     try:
@@ -308,7 +309,6 @@ def format_price(value):
     """Format a number as a price string."""
     return f"${value:,.0f}"
 
-
 def generate_random_color():
     """Generate a random color that is not red."""
     while True:
@@ -391,18 +391,23 @@ def plot_comparison(row, df, model=cb72, cats=cats, nums=nums, odo_values=np.ara
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    df = pd.read_sql('SELECT modelyear, make, model, price, predicted_price, residual, residual_percentage, link, posting_date, date_scraped FROM "latest_listings"', engine)
-    filtered_df = df[(df['residual_percentage'] >= 5) & (df['residual_percentage'] < 5550) & (abs(df['residual']) > 500)].sort_values(by='residual', ascending=True)
-    filtered_df['neg_res'] = filtered_df['residual']*-1
-    filtered_df['modelyear'] = filtered_df['modelyear'].astype(int)
+    with engine.connect() as conn:
+        pred_col = 'pred' + model_sfx
+        filtered_df = pd.read_sql(f'''SELECT modelyear, make, model, price, link, vin, posting_date, {pred_col}, state FROM cars_v1 WHERE posting_date >= CURRENT_DATE - INTERVAL '2 days';''', conn)
+        # UNION SELECT modelyear, make, model, price, link, vin, posting_date, {pred_col}, state FROM cars_v1_outliers WHERE posting_date >= CURRENT_DATE - INTERVAL '2 days'
+    filtered_df['residual'] = filtered_df[pred_col] - filtered_df['price']
+    filtered_df['residual_percentage'] = filtered_df['residual'] / filtered_df['price']
+    #filtered_df = df[(df['residual_percentage'] >= 5) & (df['residual_percentage'] < 5550) & (abs(df['residual']) > 500)].sort_values(by='residual', ascending=True)
+    #filtered_df['neg_res'] = filtered_df['residual']*-1
+    #filtered_df['modelyear'] = filtered_df['modelyear'].astype(int)
     filtered_df['price'] = '$' + filtered_df['price'].astype(int).apply(lambda x: "{:,}".format(int(x)))
-    filtered_df['predicted_price'] = '$' + filtered_df['predicted_price'].apply(lambda x: "{:,}".format(int(x)))
+    filtered_df['predicted_price'] = '$' + filtered_df[pred_col].apply(lambda x: "{:,}".format(int(x)))
     
     
-    filtered_df['new_resid'] = '$' + filtered_df['neg_res'].apply(lambda x: "{:,}".format(int(x))) + ' (' + filtered_df['residual_percentage'].round(0).astype(int).astype(str) + '%)'
-
-    good_listings = filtered_df.head(25).to_dict(orient='records')
-    bad_listings = filtered_df.tail(25).to_dict(orient='records')
+    filtered_df['new_resid'] = '$' + filtered_df['residual'].apply(lambda x: "{:,}".format(int(x))) + ' (' + filtered_df['residual_percentage'].round(0).astype(int).astype(str) + '%)'
+    filtered_df = filtered_df.sort_values(by='residual', ascending=True)
+    good_listings = filtered_df.tail(25).to_dict(orient='records')
+    bad_listings = filtered_df.head(25).to_dict(orient='records')
 
     if request.method == 'POST':
         action = request.form.get('action')  # Get the button action
@@ -468,7 +473,7 @@ def search_make_model():
     if matches.empty:
         return render_template('error.html', error_message="No vehicles found matching the provided Make, Model, and Year.")
     # Get unique Series, Trim, and DriveType options along with their index
-    unique_options = matches[[x.lower() for x in ['Series', 'Trim', 'DriveType', 'DisplacementCC', 'FuelTypePrimary']]].drop_duplicates()
+    unique_options = matches[[x.lower() for x in ['series', 'trim', 'drivetype', 'displacementcc', 'fueltypeprimary']]].drop_duplicates()
     return render_template('select_vehicle.html', matches=unique_options, make=make_lower, model=model, year=year)
 
 @app.route('/process_selection', methods=['POST'])
@@ -484,7 +489,7 @@ def process_selection():
         results_html = results.to_html(index=False, classes='data', border=0)
 
         return render_template('result.html', plot_url=plot_url, results=results_html,
-                               similar_vehicles=similar_vehicles[[x.lower() for x in ['Make', 'Model', 'ModelYear', 'Series', 'Trim', 'DriveType']]])
+                               similar_vehicles=similar_vehicles[[x.lower() for x in ['make', 'model', 'modelyear', 'series', 'trim', 'drivetype']]])
     else:
         error_message = "No vehicle found with the selected options."
         return render_template('error.html', error_message=error_message)
