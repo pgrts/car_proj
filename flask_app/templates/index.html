@@ -3,86 +3,334 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vehicle Search</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <title>Craigs Cars</title>
+    <h1><a href="#" id="clearDynamicContent">Craigs Cars</a></h1>
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.css">
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; }
-        .container { width: 50%; margin: auto; text-align: center; padding: 20px; }
-        input[type="text"] { width: 80%; padding: 10px; margin: 5px 0; }
-        button { padding: 10px 20px; margin: 5px; }
-    </style>
+        /* Basic reset for margin and padding */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+    
+        html, body {
+            height: 100%;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+        }
+    
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            color: #333;
+        }
+    
+        /* Container styling for centering and maximum width */
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+    
+        /* Style for the header */
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            color: #004d7f;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+    
+        #clearDynamicContent {
+            text-decoration: none;
+            color: #004d7f;
+        }
+    
+        /* Style for the form elements */
+        form {
+            margin-bottom: 30px;
+        }
+    
+        input[type="text"] {
+            width: 80%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+    
+        input[type="text"]:focus {
+            border-color: #004d7f;
+            outline: none;
+        }
+    
+        button {
+            padding: 12px 20px;
+            background-color: #004d7f;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+    
+        button:hover {
+            background-color: #006bb3;
+        }
+    
+        /* Styling for dynamic results area */
+        #dynamicResults {
+            margin-top: 20px;
+            text-align: center;
+        }
+    
+        /* Styling for error messages */
+        .error {
+            color: #ff3333;
+            font-weight: bold;
+        }
+    
+        /* Footer styling */
+        footer {
+            width: 100%;
+            padding: 15px;
+            text-align: center;
+            background-color: #004d7f;
+            color: white;
+            margin-top: 40px;
+        }
+    
+        footer p {
+            margin: 0;
+            font-size: 1em;
+        }
+    
+        /* Table container styling (if needed) */
+        #tableContainer {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        /* Media queries for responsiveness */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+    
+            input[type="text"] {
+                width: 100%;
+            }
+    
+            button {
+                width: 100%;
+                padding: 15px;
+            }
+    
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>    
 </head>
 <body>
     <div class="container">
-        <h1>Search Vehicles</h1>
-        <form method="POST">
-            <input type="text" name="vin" placeholder="Enter VIN">
-            <button type="submit" name="action" value="search_by_vin">Search by VIN</button>
-            
-            <input type="text" name="make_model_year" placeholder="Enter Make Model and Year">
-            <button type="submit" name="action" value="search_by_make_model_year">Search by Make/Model/Year</button>
-        </form>
-        <!-- Good Listings Section -->
-        <h2>Top 25 Listings</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Model Year</th>
-                    <th>Make</th>
-                    <th>Model</th>
-                    <th>Price</th>
-                    <th>Value</th>
-                    <th>Savings</th>
-                    <th>State</th>
-                    <th>Link</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for listing in good_listings %}
-                <tr>
-                    <td>{{ listing.modelyear }}</td>
-                    <td>{{ listing.make }}</td>
-                    <td>{{ listing.model }}</td>
-                    <td>{{ listing.price }}</td>
-                    <td>{{ listing.predicted_price }}</td>
-                    <td>{{ listing.new_resid }}</td>
-                    <td>{{ listing.state }}</td>
-                    <td><a href="{{ listing.link }}" target="_blank">View Listing</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
 
-        <!-- Bad Listings Section -->
-        <h2>Bottom 25 Listings</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Model Year</th>
-                    <th>Make</th>
-                    <th>Model</th>
-                    <th>Price</th>
-                    <th>Value</th>
-                    <th>Wastings</th>
-                    <th>State</th>
-                    <th>Link</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for listing in bad_listings %}
-                <tr>
-                    <td>{{ listing.modelyear }}</td>
-                    <td>{{ listing.make }}</td>
-                    <td>{{ listing.model }}</td>
-                    <td>{{ listing.price }}</td>
-                    <td>{{ listing.predicted_price }}</td>
-                    <td>{{ listing.new_resid }}</td>
-                    <td>{{ listing.state }}</td>
-                    <td><a href="{{ listing.link }}" target="_blank">View Listing</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <h1>Search Vehicles</h1>
+
+        <!-- Search by VIN -->
+        <form id="searchFormVin">
+            <input type="text" name="vin" id="vin" placeholder="Enter VIN">
+            <button type="button" id="searchVin">Search by VIN</button>
+        </form>
+
+        <!-- Search by Make/Model/Year -->
+        <form id="searchFormMakeModelYear">
+            <input type="text" name="make_model_year" id="makeModelYear" placeholder="Enter Make Model and Year">
+            <button type="button" id="searchMakeModelYear">Search by Make/Model/Year</button>
+        </form>
+
+        <!-- Dynamic results will be loaded here -->
+        <div id="dynamicResults">
+            <!-- Placeholder for search-specific content (tables/images) -->
+        </div>
+        
+        <!-- Dynamic results will be loaded here -->
+        <div id="dynamicResults2">
+            <!-- Placeholder for search-specific content (tables/images) -->
+        </div>
+
+        <!-- Always-loaded table.html content -->
+        <div id="tableContainer">
+            {% include 'tables_nostate.html' %}
+        </div>
     </div>
+
+    <footer>
+        <p>&copy; 2024 Craigs Cars. All rights reserved.</p>
+    </footer>
+
+    <script>
+
+        // JavaScript to clear the dynamic content
+        document.getElementById('clearDynamicContent').addEventListener('click', function(event) {
+            event.preventDefault(); // Prevent the default link behavior
+            document.getElementById('dynamicResults').innerHTML = ''; // Clear the content
+            document.getElementById('dynamicResults2').innerHTML = ''; // Clear the content
+        });
+        
+        // Handle Search by Make/Model/Year
+        document.getElementById('searchMakeModelYear').addEventListener('click', () => {
+            const makeModelYear = document.getElementById('makeModelYear').value.trim();
+    
+            if (!makeModelYear) {
+                alert("Please enter Make, Model, and Year.");
+                return;
+            }
+    
+            fetch('/search_make_model_year', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ make_model_year: makeModelYear })
+            })
+            .then(response => response.json())  // Parse the response as JSON
+            .then(data => {
+                // Ensure only dynamicResults2 is updated
+                document.getElementById('dynamicResults').innerHTML = ''; // Clear the other container
+                if (data.error) {
+                    document.getElementById('dynamicResults2').innerHTML = `<p class="error">${data.error}</p>`;
+                } else {
+                    document.getElementById('dynamicResults2').innerHTML = data.html;
+
+                    // Dynamically update the form's action URL for form submission
+                    const form = document.getElementById('vehicle-selection-form');
+                    form.setAttribute('action', data.process_selection_url);  // Set the action URL
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    
+        // Handle Search by VIN
+        document.getElementById('searchVin').addEventListener('click', () => {
+            const vin = document.getElementById('vin').value.trim();
+
+            if (!vin) {
+                alert("Please enter a VIN.");
+                return;
+            }
+
+            fetch('/search_vin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vin: vin })
+            })
+            .then(response => response.json())  // Parse the response as JSON
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
+                } else {
+                    // Update the dynamicResults div with the plot image
+                    if (data.plot_img) {
+                        const plotImage = `<img src="data:image/png;base64,${data.plot_img}" alt="Generated Plot" />`;
+                        document.getElementById('dynamicResults').innerHTML = plotImage;
+                    }
+
+                    // Display the styled table if it's present in the response
+                    if (data.html_table) {
+                        // Insert the HTML table with styles into the page
+                        document.getElementById('dynamicResults').innerHTML += data.html_table;
+                    }
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+    // Event delegation to handle dynamically added buttons
+    document.addEventListener('click', function (event) {
+        if (event.target && event.target.classList.contains('select-button')) {
+            const vin = event.target.getAttribute('data-vin');
+
+            fetch('/search_vin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ vin: vin })
+                })
+                .then(response => response.json())  // Parse the response as JSON
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
+                    } else {
+                        // Update the dynamicResults div with the plot image
+                        if (data.plot_img) {
+                            const plotImage = `<img src="data:image/png;base64,${data.plot_img}" alt="Generated Plot" />`;
+                            document.getElementById('dynamicResults').innerHTML = plotImage;
+                        }
+
+                        // Display the styled table if it's present in the response
+                        if (data.html_table) {
+                            // Insert the HTML table with styles into the page
+                            document.getElementById('dynamicResults').innerHTML += data.html_table;
+                        }
+                    }
+                })
+            .catch(error => console.error('Error:', error));
+        }
+    });
+
+    $(document).ready(function() {
+    // Event delegation for the "Clone" button
+    $(document).on('click', '.clone-button', function() {
+        var row = $(this).closest('tr'); // Get the row that contains the button
+        var clonedRow = row.clone(); // Clone the row
+        row.after(clonedRow); // Append the cloned row directly after the original row
+    });
+
+    // Event delegation for the "Update Prediction" button
+    $(document).on('click', '.update-prediction', function() {
+        var rowIndex = $(this).data("row-index");
+        var odometer = $("select[name='odometer'][data-row-index='" + rowIndex + "']").val();
+        var paintColor = $("select[name='paint_color'][data-row-index='" + rowIndex + "']").val();
+        var state = $("select[name='state'][data-row-index='" + rowIndex + "']").val();
+        var condition = $("select[name='condition'][data-row-index='" + rowIndex + "']").val();
+
+        $.ajax({
+            url: '/update_prediction',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                index: rowIndex,
+                odometer: odometer,
+                paint_color: paintColor,
+                state: state,
+                condition: condition
+            }),
+            success: function(response) {
+                if (response.success) {
+                    // Update the predicted price in the HTML
+                    $("span.predicted-price[data-row-index='" + rowIndex + "']").text(response.predicted_price);
+                } else {
+                    alert("Error updating prediction: " + response.error);
+                }
+            },
+            error: function() {
+                alert("Error updating prediction.");
+            }
+        });
+    });
+});
+
+
+
+
+</script>    
 </body>
 </html>

@@ -1,0 +1,220 @@
+<!-- State Filter for Table 1 -->
+<div class="filter-container">
+    <label for="stateFilter1">Filter by State (Table 1):</label>
+    <select id="stateFilter1">
+        <option value="">All States</option>
+        <!-- Dynamically adding states -->
+        <script>
+            const states = {
+                ak: "Alaska", al: "Alabama", ar: "Arkansas", az: "Arizona", ca: "California",
+                co: "Colorado", ct: "Connecticut", dc: "District of Columbia", de: "Delaware", 
+                fl: "Florida", ga: "Georgia", hi: "Hawaii", ia: "Iowa", id: "Idaho", il: "Illinois",
+                in: "Indiana", ks: "Kansas", ky: "Kentucky", la: "Louisiana", ma: "Massachusetts",
+                md: "Maryland", me: "Maine", mi: "Michigan", mn: "Minnesota", mo: "Missouri",
+                ms: "Mississippi", mt: "Montana", nc: "North Carolina", nd: "North Dakota",
+                ne: "Nebraska", nh: "New Hampshire", nj: "New Jersey", nm: "New Mexico", nv: "Nevada",
+                ny: "New York", oh: "Ohio", ok: "Oklahoma", or: "Oregon", pa: "Pennsylvania",
+                ri: "Rhode Island", sc: "South Carolina", sd: "South Dakota", tn: "Tennessee",
+                tx: "Texas", ut: "Utah", va: "Virginia", vt: "Vermont", wa: "Washington", 
+                wi: "Wisconsin", wv: "West Virginia", wy: "Wyoming"
+            };
+
+            const stateSelect1 = document.getElementById('stateFilter1');
+            for (const [abbr, name] of Object.entries(states)) {
+                stateSelect1.innerHTML += `<option value="${abbr}">${name}</option>`;
+            }
+        </script>
+    </select>
+</div>
+
+<!-- Table 1 (Listings) -->
+<div style="overflow-x: auto; overflow-y: auto; max-height: 90vh;">
+    <table id="dynamicTable1" class="display">
+        <thead>
+            <tr>
+                <th>Link</th>
+                <th>Posting Date</th>
+                <th>State</th>
+                <th>Odometer</th>
+                <th>Model Year</th>
+                <th>Make</th>
+                <th>Model</th>
+                <th>Price</th>
+                <th>Value</th>
+                <th>Price Below Value</th>
+                <th>Price Below Value %</th>
+                <th>Body Class</th>
+                <th>Engine Cylinders</th>
+                <th>Drive Type</th>
+                <th>Series</th>
+                <th>Trim</th>
+            </tr>
+        </thead>
+    </table>
+</div>
+
+<!-- State Filter for Table 2 -->
+<div class="filter-container">
+    <label for="stateFilter2">Filter by State (Table 2):</label>
+    <select id="stateFilter2">
+        <option value="">All States</option>
+        <!-- Dynamically adding states -->
+        <script>
+            const stateSelect2 = document.getElementById('stateFilter2');
+            for (const [abbr, name] of Object.entries(states)) {
+                stateSelect2.innerHTML += `<option value="${abbr}">${name}</option>`;
+            }
+        </script>
+    </select>
+</div>
+
+<!-- Table 2 (Price Changes) -->
+<div style="overflow-x: auto; overflow-y: auto; max-height: 90vh;">
+    <table id="dynamicTable2" class="display">
+        <thead>
+            <tr>
+                <th>Link</th>
+                <th>Old Posting Date</th>
+                <th>New Posting Date</th>
+                <th>State</th>
+                <th>Odometer</th>
+                <th>Model Year</th>
+                <th>Make</th>
+                <th>Model</th>
+                <th>Old Price</th>
+                <th>New Price</th>
+                <th>Price Drop</th>
+                <th>Body Class</th>
+                <th>Engine Cylinders</th>
+                <th>Drive Type</th>
+                <th>Series</th>
+                <th>Trim</th>
+            </tr>
+        </thead>
+    </table>
+</div>
+
+<script>
+    $(document).ready(function () {
+        // Initialize DataTables for Table 1
+        const table1 = $('#dynamicTable1').DataTable({
+            ajax: {
+                url: '/api/data',  // Replace with your data API endpoint
+                dataSrc: function (json) {
+                    const filterState = $('#stateFilter1').val();
+                    if (filterState) {
+                        return json.filter(row => row.state === filterState); // Filter by state
+                    }
+                    return json;
+                }
+            },
+            columns: [
+                { data: 'link', render: data => `<a href="${data}" target="_blank">View Listing</a>` },
+                { data: 'posting_date' },
+                { data: 'state' },
+                { data: 'odometer' },
+                { data: 'modelyear' },
+                { data: 'make' },
+                { data: 'model' },
+                { data: 'price', render: data => `$${parseFloat(data).toLocaleString()}` },
+                { data: 'predicted_price', render: data => `$${parseFloat(data).toLocaleString()}`, title: 'Value' },
+                { data: 'residual', render: data => `$${parseFloat(data).toLocaleString()}`, title: 'Price Below Value' },
+                { data: 'residual_percentage', render: data => `${parseFloat(data).toFixed(2)}%`, title: 'Price Below Value %' },
+                { data: 'bodyclass' },
+                { data: 'enginecylinders' },
+                { data: 'drivetype' },
+                { data: 'series' },
+                { data: 'trim' }
+            ]
+        });
+
+        // Hover effect for Table 1 rows
+        $('#dynamicTable1 tbody').on('mouseenter', 'tr', function () {
+            $(this).css('background-color', '#f1f1f1');  // Change background color on hover
+        }).on('mouseleave', 'tr', function () {
+            $(this).css('background-color', '');  // Revert background color on mouse leave
+        });
+
+        // Click event for Table 1 rows
+        $('#dynamicTable1 tbody').on('click', 'tr', function () {
+            const rowData = table1.row(this).data();
+            alert('You clicked on row with data: ' + JSON.stringify(rowData));  // Show row data (you can replace this with any action)
+        });
+
+        // Initialize DataTables for Table 2 (Price Changes)
+        const table2 = $('#dynamicTable2').DataTable({
+            ajax: {
+                url: '/api/price_changes', // Replace with your data API endpoint
+                dataSrc: function (json) {
+                    const filterState = $('#stateFilter2').val();
+                    if (filterState) {
+                        return json.filter(row => row.state === filterState); // Filter by state
+                    }
+                    return json;
+                }
+            },
+            columns: [
+                { data: 'link', render: data => `<a href="${data}" target="_blank">View Listing</a>` },
+                { data: 'old_posting_date' },
+                { data: 'new_posting_date' },
+                { data: 'state' },
+                { data: 'odometer' },
+                { data: 'modelyear' },
+                { data: 'make' },
+                { data: 'model' },
+                { data: 'old_price', render: data => `$${parseFloat(data).toLocaleString()}` },
+                { data: 'new_price', render: data => `$${parseFloat(data).toLocaleString()}` },
+                { data: 'price_drop', render: data => `$${parseFloat(data).toLocaleString()}` },
+                { data: 'bodyclass' },
+                { data: 'enginecylinders' },
+                { data: 'drivetype' },
+                { data: 'series' },
+                { data: 'trim' }
+            ]
+        });
+
+        // Hover effect for Table 2 rows
+        $('#dynamicTable2 tbody').on('mouseenter', 'tr', function () {
+            $(this).css('background-color', '#f1f1f1');  // Change background color on hover
+        }).on('mouseleave', 'tr', function () {
+            $(this).css('background-color', '');  // Revert background color on mouse leave
+        });
+
+        // Click event for Table 2 rows
+        $('#dynamicTable2 tbody').on('click', 'tr', function () {
+            const rowData = table2.row(this).data();
+            alert('You clicked on row with data: ' + JSON.stringify(rowData));  // Show row data (you can replace this with any action)
+        });
+
+        // Apply gradient to "Price Below Value %" column in Table 1
+        function applyGradientTable1() {
+            $('#dynamicTable1 tbody tr').each(function () {
+                const priceChange = parseFloat($(this).find('td:eq(9)').text().replace('$', '').replace(',', ''));
+                const red = priceChange < 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
+                const green = priceChange >= 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
+                $(this).css('background-color', `rgba(${red}, ${green}, 0, 0.2)`); // Apply color gradient
+            });
+        }
+
+        // Apply gradient to "Price Change" column in Table 2
+        function applyGradientTable2() {
+            $('#dynamicTable2 tbody tr').each(function () {
+                const priceChange = parseFloat($(this).find('td:eq(10)').text().replace('$', '').replace(',', ''));
+                const red = priceChange < 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
+                const green = priceChange >= 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
+                $(this).css('background-color', `rgba(${red}, ${green}, 0, 0.2)`); // Apply color gradient
+            });
+        }
+
+        // Event listeners for state filters
+        $('#stateFilter1').change(function () {
+            table1.ajax.reload();
+            applyGradientTable1();
+        });
+
+        $('#stateFilter2').change(function () {
+            table2.ajax.reload();
+            applyGradientTable2();
+        });
+    });
+</script>

@@ -4,16 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Results</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.css">
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; }
-        .container { width: 70%; margin: auto; text-align: center; padding: 20px; }
-        .data { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        .data th, .data td { border: 1px solid #ddd; padding: 4px; }
-        .data th { background-color: #f2f2f2; }
-        img { max-width: 100%; height: auto; }
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: block;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            padding-top: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        input[type="text"] {
+            width: 80%;
+            padding: 10px;
+            margin: 5px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+        }
+
+        .filter-container {
+            text-align: left;
+            margin: 20px 0;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Depreciation Curve</h1>
@@ -29,7 +65,17 @@
             <p>No similar vehicles found.</p>
         {% endif %}
         
-        <a href="/">Search Again</a>
+        {% if error_message %}
+        <p class="error">{{ error_message }}</p>
+        {% endif %}
+
+        
+        {% include 'table.html' %}
     </div>
+
+    <footer>
+        <p>&copy; 2024 Craigs Cars. All rights reserved.</p>
+    </footer>
 </body>
 </html>
+>

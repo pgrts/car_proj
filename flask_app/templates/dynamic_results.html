@@ -1,0 +1,27 @@
+<h1>Select a Vehicle for {{ year }} {{ make.capitalize() }} {{ model.capitalize() }}</h1>
+<form method="POST" action="{{ url_for('process_selection') }}">
+    <table>
+        <thead>
+            <tr>
+                <th>Series</th>
+                <th>Trim</th>
+                <th>DriveType</th>
+                <th>DisplacementCC</th>
+                <th>FuelTypePrimary</th>
+                <th>Select</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for index, row in matches.iterrows() %}
+            <tr>
+                <td>{{ row.series }}</td>
+                <td>{{ row.trim }}</td>
+                <td>{{ row.drivetype }}</td>
+                <td>{{ row.displacementcc }}</td>
+                <td>{{ row.fueltypeprimary }}</td>
+                <td><button type="submit" name="selected_idx" value="{{ index }}">Select</button></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</form>

@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Select Vehicle for {{ year }} {{ make.capitalize() }} {{ model.capitalize() }}</title>
+    <title>Craigs Cars - Vehicle Search</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -81,34 +80,26 @@
     </header>
 
     <div class="container">
-        <h1>Select a Vehicle for {{ year }} {{ make.capitalize() }} {{ model.capitalize() }}</h1>
-        <form method="POST" action="{{ url_for('process_selection') }}">
-            <table>
-                <tr>
-                    <th>Series</th>
-                    <th>Trim</th>
-                    <th>DriveType</th>
-                    <th>DisplacementCC</th>
-                    <th>FuelTypePrimary</th>
-                    <th>Select</th>
-                </tr>
-                {% for index, row in matches.iterrows() %}
-                <tr>
-                    <td>{{ row.series }}</td>
-                    <td>{{ row.trim }}</td>
-                    <td>{{ row.drivetype }}</td>
-                    <td>{{ row.displacementcc }}</td>
-                    <td>{{row.FuelTypePrimary}}</td>
-                    <td><button type="submit" name="selected_idx" value="{{ index }}">Select</button></td>
-                </tr>
-                {% endfor %}
-            </table>
-        </form>
+        <h1>Search Vehicles</h1>
+        <div class="description">
+            <p>
+                Use the interactive table below to explore listings for cars across the United States.
+                Filter by state, sort by price, and discover amazing deals! Stay informed with real-time
+                data and smart filtering options.
+            </p>
+        </div>
 
         {% if error_message %}
         <p class="error">{{ error_message }}</p>
         {% endif %}
 
+        <form method="POST">
+            <input type="text" name="vin" placeholder="Enter VIN">
+            <button type="submit" name="action" value="search_by_vin">Search by VIN</button>
+            
+            <input type="text" name="make_model_year" placeholder="Enter Make Model and Year">
+            <button type="submit" name="action" value="search_by_make_model_year">Search by Make/Model/Year</button>
+        </form>
         
         {% include 'table.html' %}
     </div>
