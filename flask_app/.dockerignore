@@ -1,3 +1,8 @@
+.ipynb_checkpoints/
+venv/
+venv-wsl/
+*.pyc
+__pycache__/
 **/__pycache__
 **/.venv
 **/.classpath

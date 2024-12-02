@@ -1,5 +1,8 @@
 *.csv
 .env
+scraper/catboost_info
+*.cbm
 table_backups/
 flask_app/venv/
+flask_app/venv-wsl/
 cb_models/

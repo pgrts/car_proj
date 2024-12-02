@@ -80,16 +80,17 @@
         <thead>
             <tr>
                 <th>Link</th>
-                <th>Old Posting Date</th>
-                <th>New Posting Date</th>
+                <th>Old Date</th>
+                <th>New Date</th>
                 <th>State</th>
-                <th>Odometer</th>
                 <th>Model Year</th>
                 <th>Make</th>
                 <th>Model</th>
                 <th>Old Price</th>
                 <th>New Price</th>
                 <th>Price Change</th>
+                <th>Old Odometer</th>
+                <th>New Odometer</th>
                 <th>Body Class</th>
                 <th>Engine Cylinders</th>
                 <th>Drive Type</th>
@@ -174,16 +175,17 @@
             },
             columns: [
                 { data: 'new_link', render: data => `<a href="${data}" target="_blank">View Listing</a>` },
-                { data: 'old_posting_date' },
-                { data: 'new_posting_date' },
+                { data: 'old_date_scraped' },
+                { data: 'new_date_scraped' },
                 { data: 'state' },
-                { data: 'odometer' },
                 { data: 'modelyear' },
                 { data: 'make' },
                 { data: 'model' },
                 { data: 'old_price', render: data => `$${parseFloat(data).toLocaleString()}` },
                 { data: 'new_price', render: data => `$${parseFloat(data).toLocaleString()}` },
                 { data: 'price_drop', render: data => `$${parseFloat(data).toLocaleString()}`, title: 'Price Drop' },
+                { data: 'old_odometer' },
+                { data: 'new_odometer' },
                 { data: 'bodyclass' },
                 { data: 'enginecylinders' },
                 { data: 'drivetype' },
@@ -195,7 +197,7 @@
         // Apply gradient to "Price Change" column in Table 2
         function applyGradientTable2() {
             $('#dynamicTable2 tbody tr').each(function () {
-                const cell = $(this).find('td:nth-child(11)'); // Price Change column (10th)
+                const cell = $(this).find('td:nth-child(12)'); // Price Change column (10th)
                 const priceChange = parseFloat(cell.text().replace(/[^\d.-]/g, ''));
 
                 if (!isNaN(priceChange)) {

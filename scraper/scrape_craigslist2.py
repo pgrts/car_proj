@@ -13,12 +13,11 @@ import zipfile
 import json
 import requests
 
+from sklearn.metrics import root_mean_squared_error
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-from sklearn.metrics import root_mean_squared_error
-
-load_dotenv()  # Load variables from .env file
+load_dotenv()  
 db_password = os.getenv('DB_PASSWORD')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
@@ -401,6 +400,7 @@ def latest_prices(new_data):
 # {'cb_model_2024_11_15.cbm': 'pred_2024_11_15', ....}
 def latest_cbm_files():
     return dict(zip([os.path.join(os.path.join(os.getcwd(), '..', 'cb_models'), file) for file in os.listdir(os.path.join(os.getcwd(), '..', 'cb_models')) if os.path.isfile(os.path.join(os.path.join(os.getcwd(), '..', 'cb_models'), file))], ['pred_' + x.lstrip('cb_model_').rstrip('.cbm') for x in os.listdir(os.path.join(os.getcwd(), '..', 'cb_models'))]))
+
 # WHEN WE RETRAIN MODEL 
 # Alter Table: Add pred_col
 # Resave / Overwrite main_data / whatever schema we use to use the new column
@@ -514,27 +514,83 @@ mod_floats = ['trackwidth',
  'doors']
 mod_dts = ['reference_date', 'date_scraped', 'posting_date']
 
+def retrain_model(main_data, main_data_outliers, user='postgres', password=db_password, host='localhost', port='5432', db_name='cars'):
 
-def latest_cbm_f():
-    
-    cbm_files =  os.listdir(os.path.join(os.getcwd(), '..', 'cb_models'))
-    cbm_dates = [x.lstrip('cb_model_').rstrip('.cbm') for x in cbm_files]
-    latest_file = [x for x in cbm_files if max(cbm_dates) in x][0]
+    engine = create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}')
 
-    return os.path.join(os.getcwd(), '..', 'cb_models', latest_file)  
+    with engine.connect() as conn:
+        df = pd.read_sql_query(text(f"select * FROM car_test UNION select * from car_test_outliers"), conn)
+        
+    good_index = set(df.index)
+    bad_index = set()
+
+    for mod_file, col in latest_cbm_files().items():
+
+        if col not in df.columns:
+            cbm = CatBoostRegressor()
+            cbm.load_model(mod_file)
+            df[col] = cbm.predict(model_prep(df[cats+nums])).round().astype(int)
+            df['error'] = df[col] - df['price']
+            df['error_percent'] = df['error'] / df['price']
+
+
+            with engine.connect() as conn:
+                for table in [main_data, main_data_outliers, 'schema_example']:
+                    scheme_query = text(f'''ALTER TABLE {table} ADD COLUMN {col} BIGINT; ''')
+                    conn.execute(scheme_query)
+                    conn.commit()
+            
+    epm_msk = epm(df)
+    abse_mask = abse(df)
+
+    combined_mask = epm_msk | abse_mask
+
+    # Get indices of outliers
+    outlier_indices = df[combined_mask].index
+
+    # Update bad_index and good_index
+    bad_index.update(outlier_indices)
+    good_index.difference_update(outlier_indices)
+
+    # Create DataFrames for good and bad rows
+    good_df = df.loc[good_index]
+    bad_df = df.loc[bad_index]
+
+    backup_dir = os.path.abspath(os.path.join(os.getcwd(), '..', 'table_backups', col))
+    print(f"Backup directory: {backup_dir}")
+    os.makedirs(backup_dir, exist_ok=True)  # Ensure backup directory exists
+
+    with engine.connect() as conn:
+        for table, df in {main_data: good_df, main_data_outliers: bad_df}.items():
+            backup_file = os.path.join(backup_dir, f"{table}.dump")
+            print(f"Backing up table {table} to {backup_file}...")
+
+            # Set the PGPASSWORD environment variable temporarily for pg_dump
+            env = os.environ.copy()
+            env['PGPASSWORD'] = password
+
+            # Run pg_dump for each table
+            subprocess.run([
+                "pg_dump", "-U", user, "-h", host, "-p", port, "-d", db_name,
+                "-t", table, "-Fc", "-f", backup_file
+            ], check=True, env=env)
+
+            print(f"Backup of table {table} completed.")
+            
+            prep_cd_sql(df, mod_ints, mod_floats, mod_texts).to_sql(table, engine, index=False, if_exists='replace')  
 
 def abse(df, lb=-25000, ub=25000):
     return (df['error'] < lb) | (df['error'] > ub)
-    
+
+def epm(df, lb=-0.75, ub=1.5):
+    return (df['error_percent'] < lb) | (df['error_percent'] > ub) 
+
 def create_preds(df, model, pred_col):
     #load df, load model
     df[pred_col] = model.predict(model_prep(df[cats+nums])).round().astype(int)
     df['error'] = df[pred_col] - df['price']
     df['error_percent'] = df['error'] / df['price']
     return df
-
-def epm(df, lb=-1.25, ub=2.5):
-    return (df['error_percent'] < lb) | (df['error_percent'] > ub)
     
 def divert_outliers(df):
     # Initialize good_index with all indices and bad_index as empty
@@ -590,7 +646,7 @@ def prep_cd_sql(df, int_cols, float_cols, text_cols, dt_cols=['reference_date', 
         df[col] = df[col].replace('Not Applicable', np.nan)
         df[col] = df[col].replace('None', np.nan)
         
-    df['posting_date'] = pd.to_datetime(df['posting_date'], format='ISO8601')
+    df['posting_date'] = pd.to_datetime(df['posting_date'])
 
     return df[int_cols+float_cols+text_cols+dt_cols]
 
@@ -1204,8 +1260,7 @@ def dump_backup(substring, user='postgres', password=db_password, host='localhos
 
     print("Backup process completed.")
 
-
-datestr = '2024-11-24'
+datestr = '2024-11-31'
 datestr_sql = '_' + datestr.replace('-', '_')
 source_db_url = f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars'
 backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'

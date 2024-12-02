@@ -12,12 +12,7 @@ import requests
 import random
 from sqlalchemy import create_engine
 import os 
-from dotenv import load_dotenv
-
-
-
-load_dotenv()  # Load variables from .env file
-db_password = os.getenv('DB_PASSWORD')
+from datetime import date
 
 app = Flask(__name__)
 
@@ -129,7 +124,6 @@ nums =  [x.lower() for x in ['ModelYear',
  'Windows',
  'days_since',
  'state_income']]
-
     
 def latest_cbm_f():
     
@@ -145,22 +139,360 @@ def model_prep(df2):
     return df2
     
 # Load the dataframe of vehicle data for finding similar vehicles
-engine = create_engine(f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars')
 
-main_table = 'car_test'
-#main_preds = main_table + '_id_preds'
+today_date = date.today().strftime("%Y-%m-%d")
+days_since_reference = (date.today() - date(2021, 1, 1)).days
+unique_vehicles = 'unique_vehicles'
+price_changes = 'price_changes'
+latest_listings = 'latest_listings'
 
-main_table_o = 'car_test_outliers'
-#main_preds_o = main_table_o + '_id_preds'
+db_path = os.path.abspath('data/car_db.db')  # Adjust '../' if more levels are needed
+seql_engine = create_engine(f'sqlite:///{db_path}')
 
-df_vehicles = pd.read_sql('car_test', engine)
-df_vehicles.replace('', np.nan)
-interval = 3
+#df_vehicles = model_prep(pd.read_sql(f'{unique_vehicles}', seql_engine)).replace({'None':'nan'})
+df_vehicles = None
+state_income_map = None
 
 cb72 = CatBoostRegressor()
-latest_cbb = latest_cbm_f()
-model_sfx = '_' + latest_cbb.lstrip(os.path.join(os.getcwd(), '..', 'cb_models')).rstrip('.cbm')
-cb72.load_model(latest_cbb)
+cb72.load_model('data/cb_model_2024_11_25.cbm')
+
+
+@app.route('/vehicle_tool', methods=['GET'])
+def vehicle_tool():
+    global df_vehicles
+    global state_income_map
+
+    if df_vehicles is None:
+        df_vehicles = model_prep(pd.read_sql(f'{unique_vehicles}', seql_engine)).replace({'None': 'nan'})
+
+    if state_income_map is None:
+        state_income_map = df_vehicles[["state", "state_income"]].drop_duplicates().set_index("state").to_dict()["state_income"]
+
+    dropdown_options = {
+        "make": sorted(df_vehicles["make"].unique().tolist()),
+        "paint_color": sorted(df_vehicles["paint_color"].unique().tolist()),
+        "condition": sorted(df_vehicles["condition"].unique().tolist()),
+        "state": sorted(df_vehicles["state"].unique().tolist())
+    }
+
+
+    table_html = f'''
+    <button id="addRow">Add Row</button>
+    <table id="vehicleTable" border="1">
+        <tr>
+            <th>Clone</th><th>Remove</th><th>Make</th><th>Model</th><th>Year</th><th>Series</th><th>Trim</th><th>Engine Size</th><th>Engine Cylinders</th>
+            <th>Fuel Type</th><th>DriveType</th><th>State</th><th>Region</th>
+            <th>Condition</th><th>Paint Color</th><th>Days Since 01-01-2021<br><small>({today_date}: {days_since_reference} days)</small></th>
+            <th>Odometer</th><th>Predicted Price</th><th>Predict</th>
+        </tr>
+    </table>
+    '''
+    # Return the table HTML and dropdown options as a JSON response
+    return jsonify({
+        'html': table_html,
+        'dropdown_options': dropdown_options
+    })
+
+@app.route('/get-models', methods=['GET', 'POST'])
+def get_models():
+    global df_vehicles
+    if request.method == 'POST':
+        data = request.get_json()  # Ensure you are getting JSON data
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+        
+        make = data.get('make')
+        print(f'make: {make}')  # Should print the make if received correctly
+        
+        if not make:
+            return jsonify({"error": "Make is required"}), 400
+
+        models = df_vehicles[df_vehicles['make'] == make]['model'].unique().tolist()
+        print(f'models: {models}')  # Should print the models
+
+        return jsonify({"models": models})
+
+@app.route('/get_model_year', methods=['POST'])
+def get_model_year():
+    global df_vehicles
+    try:
+        data = request.get_json()
+        make = data['make']
+        model = data['model']
+        
+        print(f'make: {make}, model: {model}')  # Debugging output
+        
+        # Filter the DataFrame for the given make and model
+        filtered_df = df_vehicles[(df_vehicles['make'] == make) & (df_vehicles['model'] == model)]
+        
+        # Extract and sort modelyear values
+        modelyear = filtered_df['modelyear'].apply(lambda x: int(x) if isinstance(x, (float, int)) and not pd.isna(x) else None).dropna().unique().tolist()
+        modelyear.sort()  # Ensure the years are sorted numerically
+        
+        return jsonify({
+            'modelyear': modelyear
+        })
+    except Exception as e:
+        print(f"Error: {str(e)}")  # Log the error
+        return jsonify({"error": f"Failed to get model year data: {str(e)}"}), 500
+
+@app.route('/get_model_extras', methods=['POST'])
+def get_model_extras():
+    global df_vehicles
+    try:
+        data = request.get_json()  # Ensure you are getting JSON data
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+
+        make = data['make']
+        model = data['model']
+        year = data['modelyear']
+        print(f'make: {make}, model: {model} year: {str(year)}')  # Debugging output
+        
+        # Filter the DataFrame
+        filtered_df = df_vehicles[(df_vehicles['make'] == make) & (df_vehicles['model'] == model) & (df_vehicles['modelyear'] == float(year))]
+
+        print(filtered_df[['series','trim', 'displacementcc', 'fueltypeprimary','drivetype']])
+        
+        if filtered_df.empty:
+            return jsonify({"error": "No matching records found"}), 404
+
+        # Convert values and handle NaN
+        enginecylinders = filtered_df['enginecylinders'].unique().tolist()#.apply(lambda x: int(x) if isinstance(x, (float, int)) and not pd.isna(x) else 'nan').unique().tolist()
+
+
+        # Extract unique values
+        series = filtered_df['series'].unique().tolist()#.apply(lambda x: int(x) if isinstance(x, (float, int)) and not pd.isna(x) else 'None').unique().tolist()
+        trim = filtered_df['trim'].unique().tolist()#.apply(lambda x: int(x) if isinstance(x, (float, int)) and not pd.isna(x) else 'None').unique().tolist()
+        drivetype = filtered_df['drivetype'].unique().tolist()#.apply(lambda x: int(x) if isinstance(x, (float, int)) and not pd.isna(x) else 'None').unique().tolist()
+        displacementcc = filtered_df['displacementcc'].apply(lambda x: int(x) if isinstance(x, (float, int)) and not pd.isna(x) else 'None').unique().tolist()
+        fueltypeprimary = filtered_df['fueltypeprimary'].unique().tolist()#.apply(lambda x: int(x) if isinstance(x, (float, int)) and not pd.isna(x) else 'None').unique().tolist()
+    
+        print(
+            f'enginecylinders: {enginecylinders}\n'
+            f'series: {series}\n'
+            f'trim: {trim}\n'
+            f'drivetype: {drivetype}\n'
+            f'displacementcc: {displacementcc}\n'
+            f'fueltypeprimary: {fueltypeprimary}'
+        )
+
+        # Return the relevant data as a JSON response
+        return jsonify({
+            'series': series,
+            'trim': trim,
+            'drivetype': drivetype,
+            'enginecylinders': enginecylinders,
+            'displacementcc': displacementcc,
+            'fueltypeprimary': fueltypeprimary
+        })
+    
+    except Exception as e:
+        print(f"Error: {str(e)}")  # Log the error
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_states_regions', methods=['POST'])
+def get_states_regions():
+    global df_vehicles
+    try:
+        data = request.get_json()  # Ensure you are getting JSON data
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+
+        state = data['state']
+        print(f'state: {state}')  # Debugging output
+        
+        # Simulate region lookup based on state
+        regions = (df_vehicles.groupby('state')['region']
+            .apply(lambda x: x.unique().tolist())
+            .to_dict()
+        )
+        
+        # Return the regions as a JSON response
+        return jsonify(regions.get(state, []))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/predict_price', methods=["POST"])
+def predict_price():
+    global df_vehicles
+    global state_income_map
+
+    make = request.form.get('make')
+    model = request.form.get('model')
+    modelyear = request.form.get('model_year')
+    series = request.form.get('series')
+    trim = request.form.get('trim')
+    displacementcc = request.form.get('displacementcc')
+    enginecylinders = request.form.get('enginecylinders')
+    drivetype = request.form.get('drivetype')
+    fueltypeprimary = request.form.get('fueltypeprimary')
+    state = request.form.get('state')
+    region = request.form.get('region')
+    condition = request.form.get('condition')
+    paint_color = request.form.get('paint_color')
+    days_since = int(request.form.get('days_since', days_since_reference))  
+    odometer = int(request.form.get('odometer', 100000)) 
+
+    print(f"make: {make}, type: {type(make)}")
+    print(f"model: {model}, type: {type(model)}")
+    print(f"model_year: {modelyear}, type: {type(modelyear)}")
+    print(f"series: {series}, type: {type(series)}")
+    print(f"trim: {trim}, type: {type(trim)}")
+    print(f"displ: {displacementcc}, type: {type(displacementcc)}")    
+    print(f"engine_cylinders: {enginecylinders}, type: {type(enginecylinders)}")
+    print(f"drive_type: {drivetype}, type: {type(drivetype)}")
+    print(f"fuel_type_primary: {fueltypeprimary}, type: {type(fueltypeprimary)}")
+    print(f"state: {state}, type: {type(state)}")
+    print(f"region: {region}, type: {type(region)}")
+    print(f"condition: {condition}, type: {type(condition)}")
+    print(f"paint_color: {paint_color}, type: {type(paint_color)}")
+    print(f"days_since: {days_since}, type: {type(days_since)}")
+    print(f"odometer: {odometer}, type: {type(odometer)}")
+
+    mask = df_vehicles
+
+    mask_length = len(mask)
+
+    while mask_length > 1:
+        # Step-by-step condition filtering
+        mask = mask[mask["make"] == make]
+        print(f"Rows after filtering by make: {len(mask)}")
+        if len(mask) == 1:
+            break
+
+        mask = mask[mask["model"] == model]
+        print(f"Rows after filtering by model: {len(mask)}")
+        if len(mask) == 1:
+            break
+
+        mask = mask[mask["modelyear"] == float(modelyear)]
+        print(f"Rows after filtering by modelyear: {len(mask)}")
+        if len(mask) == 1:
+            break
+
+        mask = mask[mask["series"] == series]
+        print(f"Rows after filtering by series: {len(mask)}")
+        if len(mask) == 1:
+            break        
+
+        mask = mask[mask["trim"] == trim]
+        print(f"Rows after filtering by trim: {len(mask)}")
+        if len(mask) == 1:
+            break        
+
+        mask = mask[mask["enginecylinders"] == enginecylinders]
+        print(f"Rows after filtering by enginecylinders: {len(mask)}")
+        if len(mask) == 1:
+            break
+
+        if displacementcc == 'None':
+            mask = mask[mask["displacementcc"].isnull()]
+        else:
+            mask = mask[mask["displacementcc"] == float(displacementcc)]
+        print(f"Rows after filtering by displacementcc: {len(mask)}")
+        if len(mask) == 1:
+            break
+
+        mask = mask[mask["drivetype"] == drivetype]
+        print(f"Rows after filtering by drivetype: {len(mask)}")
+        if len(mask) == 1:
+            break
+
+        if fueltypeprimary == None:
+            print('Fuel Type None')
+        else:
+            mask = mask[mask["fueltypeprimary"] == fueltypeprimary]
+        print(f"Rows after filtering by fueltypeprimary: {len(mask)}")
+        if len(mask) == 1:
+            break
+
+
+    state_income = state_income_map[state]
+
+    if len(mask) == 1:
+        mask['state_income'] = state_income
+        mask["state"] = state
+        mask["region"] = region
+        mask["condition"] = condition
+        mask["paint_color"] = paint_color
+        mask["days_since"] = days_since
+        mask["odometer"] = odometer
+
+        print("Final row with new values:")
+        print(mask)
+
+    else:
+        print("No unique row found.")
+
+    pred = cb72.predict(mask[cats+nums])[0].round().astype(int)
+
+    print(type(pred))
+    # Return the prediction
+    return jsonify({"predicted_price": int(pred)})
+
+@app.route('/model-tool',  methods=['GET', 'POST'])
+def model_tool():
+    df_vehicles = model_prep(pd.read_sql(f'{unique_vehicles}', seql_engine))
+
+    # Precompute mappings
+    make_to_model = (
+        df_vehicles.groupby('make')['model']
+        .apply(lambda x: x.unique().tolist())
+        .to_dict()
+    )
+
+    model_to_series_trim = (
+        df_vehicles.groupby(['model', 'series'])['trim']
+        .apply(lambda x: x.unique().tolist())
+        .reset_index()
+        .groupby('model')
+        .apply(lambda x: {
+            'series': x['series'].unique().tolist(),
+            'trim': list(set([item for sublist in x['trim'] for item in sublist]))  # Simplified trim processing
+        })
+        .to_dict()
+    )
+
+    dropdown_options = {
+        "make": df_vehicles["make"].unique().tolist(),
+        "Paint Color": df_vehicles["paint_color"].unique().tolist(),
+        "condition": df_vehicles["condition"].unique().tolist(),
+        "state" : df_vehicles['state'].unique().tolist()
+    }
+
+    return 
+
+@app.route('/get-displacement-fueltype-engine', methods=['POST'])
+def get_displacement_fueltype_engine():
+    data = request.get_json()
+    model = data.get('model')
+    series = data.get('series')
+    trim = data.get('trim')
+
+    if not model or not series or not trim:
+        return jsonify({"error": "Model, series, and trim are required"}), 400
+
+    # Filter df_vehicles based on selected model, series, and trim
+    filtered_df = df_vehicles[(df_vehicles['model'] == model) & 
+                              (df_vehicles['series'] == series) & 
+                              (df_vehicles['trim'] == trim)]
+
+    # Get unique values for displacement, fueltype, and engine cylinders
+    displacementcc = filtered_df['displacementcc'].fillna('None').unique().tolist()
+    fueltypeprimary = filtered_df['fueltypeprimary'].fillna('None').unique().tolist()
+    enginecylinders = filtered_df['enginecylinders'].fillna('None').unique().tolist()
+
+    print(displacementcc)
+    print(fueltypeprimary)
+    print(enginecylinders)
+
+    # Ensure non-empty arrays are returned, otherwise empty arrays
+    return jsonify({
+        "displacementCC": displacementcc if displacementcc else ['None'],
+        "fueltypeprimary": fueltypeprimary if fueltypeprimary else ['None'],
+        "enginecylinders": enginecylinders if enginecylinders else ['None']
+    })
 
 def get_json(url):
     try:
@@ -206,58 +538,90 @@ def create_assumption(df):
 
     return df
 
-def find_similar_vehicles(row, df2, initial_threshold=0, increment=250, max_threshold=2000, n_veh=3):
+def find_similar_vehicles(row, df2, initial_threshold=0, increment=500, max_threshold=2000, n_veh=3):
     # Normalize column names to lowercase
-    #df2.columns = df2.columns.str.lower()
+    # df2.columns = df2.columns.str.lower()
     
     if isinstance(row, pd.DataFrame):
-        #row = model_prep(row)
-        df1 = row.iloc[0]  # Ensure single row
+        if row.shape[0] == 1:
+            df1 = row  # Keep as DataFrame if it's a single row
+        else:
+            df1 = row.iloc[0:1]  # If multiple rows, take the first row as a DataFrame
     elif isinstance(row, pd.Series):
-        df1 = row
+        df1 = row.to_frame().T  # Convert Series to DataFrame
     else:
         print('row is not series or dataframe')
         print(row)
         return pd.DataFrame()  # Return empty DataFrame in case of error
-
     print('df1')
-    print(df1.head())
+    print(type(df1))  # Should print <class 'pandas.core.frame.DataFrame'>
+    print(df1.columns)  # To check if 'enginecylinders' is a column in df1
+    print(df1['enginecylinders'].dtype)
+
+    
+    print(df1['enginecylinders'])
+    print(df2['enginecylinders'].dtype)
+    print(df2['enginecylinders'])
+    df1['enginecylinders'] = df1['enginecylinders'].astype(float)
+    df2['enginecylinders'] = df2['enginecylinders'].astype(float)
+    print('df1 myr dtype')
+    print(df1['modelyear'].dtype)
+    print('df2 myr dtype')
+    print(df2['modelyear'].dtype)
+
     # Ensure df1 column names are also lowercase
     #df1 = df1.rename(str.lower)
 
     # Check if displacementcc in df1 is null
-    if pd.isna(df1['displacementcc']):
+    if pd.isna(df1['displacementcc'].iloc[0]):
         print('NULL DISPLACEMENT')
         return find_similar_vehicles_no_threshold(df1, df2, n_veh)
     else:
+        print('succ')
         return find_similar_vehicles_with_threshold(df1, df2, initial_threshold, increment, max_threshold, n_veh)
     
 def find_similar_vehicles_with_threshold(df1, df2, initial_threshold, increment, max_threshold, n_veh):
+    print('sim thres called')
     threshold = initial_threshold
     similar_vehicles = pd.DataFrame()
 
     while len(similar_vehicles) < n_veh and threshold <= max_threshold:
         # Initialize mask to True for all rows
+        
         mask = pd.Series(True, index=df2.index)
         
-        # Add conditions to the mask dynamically
-        if pd.notnull(df1['vehicletype']):
-            mask &= df2['vehicletype'] == df1['vehicletype']
-        if pd.notnull(df1['drivetype']):
-            mask &= df2['drivetype'] == df1['drivetype']
-        if pd.notnull(df1['gvwr']):
-            mask &= df2['gvwr'] == df1['gvwr']
-        if pd.notnull(df1['bodyclass']):
-            mask &= df2['bodyclass'] == df1['bodyclass']
-        if pd.notnull(df1['enginecylinders']):
-            mask &= df2['enginecylinders'] == df1['enginecylinders']
-        if pd.notnull(df1['modelyear']):
-            mask &= abs(df2['modelyear'] - df1['modelyear']) <= threshold / 500
-        if pd.notnull(df1['displacementcc']):
-            mask &= abs(df2['displacementcc'] - df1['displacementcc']) < threshold
+        # Assuming df1 is a single-row DataFrame
+        if pd.notnull(df1['vehicletype'].iloc[0]):  # Using .iloc[0] to get the value from the first row
+            mask &= df2['vehicletype'] == df1['vehicletype'].iloc[0]  # Compare with the value of df1
+            print(mask[mask == True].size)
+            
+        if pd.notnull(df1['drivetype'].iloc[0]):  # Using .iloc[0] to get the value from the first row
+            mask &= df2['drivetype'] == df1['drivetype'].iloc[0]  # Compare with the value of df1
+            print(mask[mask == True].size)
+
+        if pd.notnull(df1['gvwr'].iloc[0]):  # Using .iloc[0] to get the value from the first row
+            mask &= df2['gvwr'] == df1['gvwr'].iloc[0]  # Compare with the value of df1
+            print(mask[mask == True].size)
+
+        if pd.notnull(df1['bodyclass'].iloc[0]):  # Using .iloc[0] to get the value from the first row
+            mask &= df2['bodyclass'] == df1['bodyclass'].iloc[0]  # Compare with the value of df1
+            print(mask[mask == True].size)
+
+        if pd.notnull(df1['enginecylinders'].iloc[0]):  # Using .iloc[0] to get the value from the first row
+            mask &= df2['enginecylinders'] == df1['enginecylinders'].iloc[0]  # Compare with the value of df1
+            print(mask[mask == True].size)
+
+        if pd.notnull(df1['modelyear'].iloc[0]):  # Using .iloc[0] to get the value from the first row
+            mask &= abs(df2['modelyear'] - df1['modelyear'].iloc[0]) <= threshold / 500  # Compare with the value of df1
+            print(mask[mask == True].size)
+
+        if pd.notnull(df1['displacementcc'].iloc[0]):  # Using .iloc[0] to get the value from the first row
+            mask &= abs(df2['displacementcc'] - df1['displacementcc'].iloc[0]) < threshold  # Compare with the value of df1
+            print(mask[mask == True].size)
+                    
 
         # Exclude the same make and model
-        mask &= (df2['make'] + '_' + df2['model']) != (df1['make'] + '_' + df1['model'])
+        mask &= (df2['make'] + '_' + df2['model']) != (df1['make'].iloc[0] + '_' + df1['model'].iloc[0])
         
         # Apply the mask to filter df2
         similar_vehicles = df2[mask].drop_duplicates(subset=['make', 'model'])
@@ -265,15 +629,6 @@ def find_similar_vehicles_with_threshold(df1, df2, initial_threshold, increment,
         if len(similar_vehicles) < n_veh:
             threshold += increment
 
-    '''
-    # Add extra columns
-    similar_vehicles['condition'] = df1['condition']
-    similar_vehicles['state'] = df1['state']
-    similar_vehicles['region'] = df1['region']
-    similar_vehicles['state_income'] = df1['state_income']   
-    print('sim vehicles are:')
-    print(similar_vehicles)
-    '''
     return model_prep(similar_vehicles.head(n_veh))
 
 def find_similar_vehicles_no_threshold(df1, df2, n_veh, max_threshold=5):
@@ -424,7 +779,7 @@ def plot_comparison(row, df, model=cb72, cats=cats, nums=nums, odo_values=np.ara
 
     return img_base64, results
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
     return render_template('index.html')
 
@@ -442,6 +797,11 @@ def search():
 
 @app.route('/search_make_model_year', methods=['POST'])
 def search_make_model_year():
+    global df_vehicles
+    if df_vehicles is None:
+        print('search make model  year getting df_vehicles')
+        df_vehicles = model_prep(pd.read_sql(f'{unique_vehicles}', seql_engine)).replace({'None': 'nan'})
+
     try:
         data = request.get_json()  # Get the JSON data sent from the frontend
         make_model_year = data.get('make_model_year', '').strip()
@@ -463,9 +823,15 @@ def search_make_model_year():
                     model = part
                 elif len(parts) > 3 and i >= 2:  # Add remaining parts to model if there are more than 3 parts
                     model += ' ' + str(part)
+            print(f"make:{make} model:{model} year:{str(year)}")
         except:
             print('string parser fail')
             print(f"make:{make} model:{model} year:{str(year)}")
+
+        print(df_vehicles[['make','model','modelyear']].dtypes)
+        print(type(make))
+        print(type(model))
+        print(type(year))
 
         # Filter the vehicles from df_vehicles
         matches = df_vehicles[
@@ -523,14 +889,16 @@ def search_make_model_year():
 
 @app.route('/search_vin', methods=['POST'])
 def search_vin():
-
+    global df_vehicles
+    if df_vehicles is None:
+        df_vehicles = model_prep(pd.read_sql(f'{unique_vehicles}', seql_engine)).replace({'None': 'nan'})
     try:
         vin = None
 
         # Handle JSON request (likely from the input form)
         if request.is_json:
             vin = request.get_json().get('vin', '').strip()
-
+            print(vin)
         # Handle form submissions (either POST or GET)
         if not vin:
             print('used selected idx')
@@ -545,37 +913,48 @@ def search_vin():
             return "VIN is required!", 400
         
         if vin in df_vehicles.vin.unique():
+            print('found vin in vehicles')
             df = df_vehicles[df_vehicles['vin'] == vin]
-            print(df[['vin', 'model']])
-
+            print(df[['vin', 'model', 'enginecylinders', 'modelyear', 'displacementcc']])
+            print(df[['vin', 'model', 'enginecylinders', 'modelyear', 'displacementcc']].dtypes)
             #if not df.empty:
-            df = df.replace('', 'nan')  # Replace empty strings with 'nan'
-            df.columns = df.columns.str.lower()
-            df['enginecylinders'] = pd.to_numeric(df['enginecylinders'], errors='coerce').astype('Int64')
-            df['modelyear'] = pd.to_numeric(df['modelyear'], errors='coerce').astype('Int64')
+            #df = df.replace('', 'nan')  # Replace empty strings with 'nan'
+            #df.columns = df.columns.str.lower()
+            #df['enginecylinders'] = pd.to_numeric(df['enginecylinders'], errors='coerce').astype('Int64')
+            #df['modelyear'] = pd.to_numeric(df['modelyear'], errors='coerce').astype('Int64')
 
-            df['displacementcc'] = df['displacementcc'].astype(float)
-            print('cols lowered')
+            #df['displacementcc'] = df['displacementcc'].astype(float)
+            #print('cols lowered')
         
-            #features = create_assumption(df)
-            #print(features)
-            return create_plot(df)
+            features = create_assumption(df)
+            
+            return create_plot(features)
 
         else:    
             print('decoding vin')
             df = vin_decode(vin)
 
             if df is not None:
-                df = df.replace('', 'nan')  # Replace empty strings with 'nan'
-                df.columns = df.columns.str.lower()
-                df['enginecylinders'] = pd.to_numeric(df['enginecylinders'], errors='coerce').astype('Int64')
-                df['modelyear'] = pd.to_numeric(df['modelyear'], errors='coerce').astype('Int64')
-
-                df['displacementcc'] = df['displacementcc'].astype(float)
-                print('cols lowered')
-            
-                #features = create_assumption(df)
-            return create_plot(df)
+                mask = (
+                    (df['ErrorCode'].isin(['0', '1', '6'])) &  # ErrorCode should be 0, 1, or 6
+                    (~df[['Make', 'Model', 'ModelYear', 'VIN']].isnull().any(axis=1))  # Make sure Make, Model, ModelYear, VIN are not null
+                )
+                if mask.any():
+                    df = df.replace('', 'nan')  # Replace empty strings with 'nan'
+                    df.columns = df.columns.str.lower()
+                    df['enginecylinders'] = pd.to_numeric(df['enginecylinders'], errors='coerce').astype(float)
+                    df['modelyear'] = pd.to_numeric(df['modelyear'], errors='coerce').astype(float)
+                    df['displacementcc'] = df['displacementcc'].astype(float)
+                    print('cols lowered')
+                    print(df[['enginecylinders', 'modelyear', 'displacementcc']])
+                    print(df[['enginecylinders', 'modelyear', 'displacementcc']].dtypes)
+                    features = create_assumption(df)
+                    return create_plot(features, new_vin=True)
+                else:
+                    return 'error'
+            else:
+                return 'error'
+                    
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -619,10 +998,28 @@ def update_prediction():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/create_plot', methods=['POST'])
-def create_plot(features):
-    similar_vehicles = find_similar_vehicles(features, df_vehicles)
+def create_plot(features, new_vin=False):
+    global df_vehicles
+    if df_vehicles is None:
+        print('df_vehicles being created')
+        df_vehicles = model_prep(pd.read_sql(f'{unique_vehicles}', seql_engine)).replace({'None': 'nan'})
 
-    df = model_prep(df_vehicles.loc[similar_vehicles.index.tolist() + features.index.tolist(), cats + nums])
+    print('creating plot...')
+    print('features:')
+    print(features)
+
+    similar_vehicles = find_similar_vehicles(features, df_vehicles)
+    print('sim veh:')
+    print(similar_vehicles)
+
+    if new_vin==True:
+        print('this is the row + similar vehicles')
+        df = pd.concat([df_vehicles.loc[similar_vehicles.index.tolist()], features])[cats + nums]
+        print(df.head())
+    else:
+        print('this is the row + similar vehicles')
+        df = df_vehicles.loc[similar_vehicles.index.tolist() + features.index.tolist(), cats + nums]
+        print(df.head())
 
     # Default values for dropdowns
     default_paint_color = 'white'
@@ -642,6 +1039,7 @@ def create_plot(features):
     # Predict using the default values
     df['predicted_price'] = cb72.predict(model_prep(df)).round().astype(int)
 
+    make_options = df_vehicles.make.unique()
     paint_color_options = [np.nan, 'red', 'grey', 'brown', 'silver', 'black', 'white', 'green',
                            'blue', 'custom', 'orange', 'yellow', 'purple']
     odometer_options = list(range(0, 500001, 25000))
@@ -822,121 +1220,39 @@ def process_selection():
 
 @app.route('/api/price_changes', methods=['GET'])
 def price_changes():
+
     try:
-        pred_col = 'pred' + model_sfx
-        query = f'''SELECT DISTINCT 
-                n.state,
-                n.odometer,
-                n.make, 
-                n.model, 
-                n.modelyear, 
-                n.{pred_col} as "predicted_price",
-                -- Ensure that new_price is always the later price (higher posting_date)
-                CASE 
-                    WHEN n.posting_date > b.posting_date THEN n.price 
-                    ELSE b.price
-                END AS "new_price", 
-                -- Ensure that old_price is always the earlier price (older posting_date)
-                CASE 
-                    WHEN n.posting_date > b.posting_date THEN b.price
-                    ELSE n.price
-                END AS "old_price", 
-                -- Ensure that new_posting_date is the later posting_date
-                CASE 
-                    WHEN n.posting_date > b.posting_date THEN n.posting_date
-                    ELSE b.posting_date
-                END AS "new_posting_date", 
-                -- Ensure that old_posting_date is the earlier posting_date
-                CASE 
-                    WHEN n.posting_date > b.posting_date THEN b.posting_date
-                    ELSE n.posting_date
-                END AS "old_posting_date",
-                n.vin, 
-                n.link AS "new_link", 
-                b.link AS "old_link",
-                n.date_scraped AS "new_date_scraped",
-                b.date_scraped AS "old_date_scraped",
-                -- Adjust price_drop calculation based on the ordering of price and dates
-                CASE 
-                    WHEN n.date_scraped > b.date_scraped THEN n.price - b.price
-                    WHEN b.date_scraped > n.date_scraped THEN b.price - n.price
-                    ELSE 0
-                END AS price_drop,
-                n.series, 
-                n.trim,
-                n.drivetype,
-                n.bodyclass,
-                n.enginecylinders
-            FROM {main_table} n
-            JOIN {main_table} b ON n.vin = b.vin
-            WHERE n.price != b.price
-            AND n.posting_date >= CURRENT_DATE - INTERVAL '{interval} days'
-            AND n.posting_date > b.posting_date;
-            '''
-        
-        with engine.connect() as conn:
-            df = pd.read_sql(query, conn)
+        df = pd.read_sql('price_changes', seql_engine)
+    except:
+        df = pd.DataFrame()
+        print('df fail')
+    #df['modelyear'] = df['modelyear'].astype(int)
+    #df['new_posting_date'] = df['new_posting_date'].astype(str)
+    #df['old_posting_date'] = df['old_posting_date'].astype(str)
+    df['new_date_scraped'] = df['new_date_scraped'].dt.strftime('%d %b %Y')
+    df['old_date_scraped'] = df['old_date_scraped'].dt.strftime('%d %b %Y')
+    df = df.fillna({'trim': 'None', 'series' : 'None', 'enginecylinders': 'N/A', 'drivetype' : 'unknown'})
+    # Store in Flask.g for reuse
+    g.table_data = df.to_dict(orient='records')
 
-        #df['residual_percentage'] = round(((df['residual'] / df['price']) * 100),2)
-        #df['posting_date'] = pd.to_datetime(df['posting_date'], format='%a, %d %b %Y %H:%M:%S GMT')
-        df = df.drop_duplicates(subset=["vin"])
-        # Format posting_date to just show day, month, and year
-        #df['new_posting_date'] = df['new_posting_date'].dt.strftime('%d %b %Y')
-        df = df.fillna({'trim': 'None', 'series' : 'None', 'enginecylinders': 'electric', 'drivetype' : 'unknown'})
-        df['price_drop'] = df['price_drop']*-1
-        # Store in Flask.g for reuse
-        g.table_data = df.to_dict(orient='records')
-
-        # Return as JSON for API clients
-        return jsonify(g.table_data)
-    
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Return as JSON for API clients
+    return jsonify(g.table_data)
 
 @app.route('/api/data', methods=['GET'])
 def data():
-    try:
-        pred_col = 'pred' + model_sfx
-        query = f'''
-
-            WITH latest_data AS (WITH ranked_data AS (
-                SELECT *, 
-                    ROW_NUMBER() OVER (
-                        PARTITION BY vin, odometer 
-                        ORDER BY posting_date DESC
-                    ) AS row_num
-                FROM {main_table}
-            )
-            SELECT *
-            FROM ranked_data
-            WHERE row_num = 1)
-
-            SELECT odometer, bodyclass, drivetype, enginecylinders, modelyear, series, trim, posting_date, make, model, price, link, 
-                   {pred_col}  as predicted_price, 
-                   (({pred_col} - price)) as residual, state 
-            FROM latest_data
-            WHERE posting_date >= CURRENT_DATE - INTERVAL '{interval} days'
-
-            ORDER BY residual DESC
-        '''
-        with engine.connect() as conn:
-            df = pd.read_sql(query, conn)
-        
-
-        df['residual_percentage'] = round(((df['residual'] / df['price']) * 100),2)
-        df['posting_date'] = pd.to_datetime(df['posting_date'], format='%a, %d %b %Y %H:%M:%S GMT')
-        
-        # Format posting_date to just show day, month, and year
-        df['posting_date'] = df['posting_date'].dt.strftime('%d %b %Y')
-        df = df.fillna({'trim': 'None', 'series' : 'None', 'enginecylinders': 'electric', 'drivetype' : 'unknown'})
-        # Store in Flask.g for reuse
-        g.table_data = df.to_dict(orient='records')
-
-        # Return as JSON for API clients
-        return jsonify(g.table_data)
     
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    df = pd.read_sql('latest_listings', seql_engine)
+    df['residual_percentage'] = round(((df['residual'] / df['price']) * 100),2)
+    
+    # Format posting_date to just show day, month, and year
+    df['posting_date'] = df['posting_date'].dt.strftime('%d %b %Y')
+    df = df.fillna({'trim': 'None', 'series' : 'None', 'enginecylinders': 'N/A', 'drivetype' : 'unknown'})
+    # Store in Flask.g for reuse
+    g.table_data = df.to_dict(orient='records')
+
+    # Return as JSON for API clients
+    return jsonify(g.table_data)
+
 
 @app.route('/search_make_model', methods=['GET', 'POST'])
 def search_make_model():

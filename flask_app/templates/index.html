@@ -40,7 +40,28 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
         }
-    
+
+        #toolContainer {
+            width: 100%;
+        }
+    /* Table styling */
+    #vehicleTable {
+        width: 100%; /* Table takes 100% width of container */
+        border-collapse: collapse; /* Remove spacing between cells */
+        margin-top: 20px; /* Add space above the table */
+        table-layout: fixed; /* Ensure columns take up equal space */
+    }
+
+    /* Ensure table cells and headers have proper styling */
+    #vehicleTable td, #vehicleTable th {
+        padding: 8px;
+        text-align: left;
+        border: 1px solid #ccc;
+        white-space: nowrap; /* Prevent text from wrapping */
+        overflow: hidden;    /* Ensure no overflow within cells */
+        text-overflow: ellipsis; /* Add ellipsis if text overflows */
+    }
+
         /* Style for the header */
         h1 {
             text-align: center;
@@ -59,7 +80,19 @@
         form {
             margin-bottom: 30px;
         }
-    
+
+        .removeRow {
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        .removeRow:hover {
+            background-color: #ff1a1a;
+        }
+
         input[type="text"] {
             width: 80%;
             padding: 12px;
@@ -99,7 +132,11 @@
             color: #ff3333;
             font-weight: bold;
         }
-    
+        .locked {
+            background-color: #f0f0f0;
+            color: #888;
+            cursor: not-allowed;
+        }
         /* Footer styling */
         footer {
             width: 100%;
@@ -119,6 +156,26 @@
         #tableContainer {
             margin-top: 30px;
             text-align: center;
+        }
+
+        #vehicleModelTool.clickable-header {
+            cursor: pointer;
+            color: white;
+            background-color: #007BFF;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-align: center;
+            display: inline-block;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        #vehicleModelTool.clickable-header:hover {
+            background-color: #0056b3;
+        }
+
+        #vehicleModelTool.clickable-header:active {
+            background-color: #004085;
         }
 
         /* Media queries for responsiveness */
@@ -143,9 +200,10 @@
     </style>    
 </head>
 <body>
-    <div class="container">
+    <h1 id="vehicleModelTool" class="clickable-header">Vehicle Model Tool</h1>
+    <div id="toolContainer"></div>
 
-        <h1>Search Vehicles</h1>
+    <div class="container">
 
         <!-- Search by VIN -->
         <form id="searchFormVin">
@@ -179,87 +237,370 @@
         <p>&copy; 2024 Craigs Cars. All rights reserved.</p>
     </footer>
 
+
     <script>
+$('#vehicleModelTool').click(function () {
+    $.get('/vehicle_tool', function (data) {
+        // Insert the table HTML into the toolContainer
+        $('#toolContainer').html(data.html);
 
-        // JavaScript to clear the dynamic content
-        document.getElementById('clearDynamicContent').addEventListener('click', function(event) {
-            event.preventDefault(); // Prevent the default link behavior
-            document.getElementById('dynamicResults').innerHTML = ''; // Clear the content
-            document.getElementById('dynamicResults2').innerHTML = ''; // Clear the content
+        // Populate dropdowns with options
+        populateDropdowns(data.dropdown_options);
+
+        // Add event listener for adding new rows
+        $('#addRow').click(function () {
+            addRow(data.dropdown_options);
         });
+
+        // Initialize event delegation for cascading dropdowns in dynamically added rows
+        initCascadingDropdowns();
+    });
+});
+
+// Function to initialize cascading dropdowns for dynamically added rows
+function initCascadingDropdowns() {
+    // Event delegation for cascading dropdowns
+    $('#vehicleTable').on('change', '.make', function () {
+        const row = $(this).closest('tr');
+        const make = $(this).val();
         
-        // Handle Search by Make/Model/Year
-        document.getElementById('searchMakeModelYear').addEventListener('click', () => {
-            const makeModelYear = document.getElementById('makeModelYear').value.trim();
-    
-            if (!makeModelYear) {
-                alert("Please enter Make, Model, and Year.");
-                return;
-            }
-    
-            fetch('/search_make_model_year', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ make_model_year: makeModelYear })
-            })
-            .then(response => response.json())  // Parse the response as JSON
-            .then(data => {
-                // Ensure only dynamicResults2 is updated
-                document.getElementById('dynamicResults').innerHTML = ''; // Clear the other container
-                if (data.error) {
-                    document.getElementById('dynamicResults2').innerHTML = `<p class="error">${data.error}</p>`;
-                } else {
-                    document.getElementById('dynamicResults2').innerHTML = data.html;
+        // Reset the model and model year selections
+        row.find('.model').html('<option value="">Select a model</option>');  // Reset model dropdown
+        row.find('.modelyear').html('<option value="">Select a year</option>');  // Reset model year dropdown
 
-                    // Dynamically update the form's action URL for form submission
-                    const form = document.getElementById('vehicle-selection-form');
-                    form.setAttribute('action', data.process_selection_url);  // Set the action URL
-                }
-            })
-            .catch(error => console.error('Error:', error));
+        // Fetch new models based on selected make
+        fetchModels(make, row);
+    });
+
+    $('#vehicleTable').on('change', '.make, .model', function () {
+        const row = $(this).closest('tr');
+        const make = row.find('.make').val();
+        const model = row.find('.model').val();
+        
+        // Only fetch model year if both make and model are selected
+        if (make && model) {
+            fetchModelYear(make, model, row);
+        }
+    });
+
+    $('#vehicleTable').on('change', '.modelyear', function () {
+        const row = $(this).closest('tr');
+        const make = row.find('.make').val();
+        const model = row.find('.model').val();
+        const year = $(this).val();  // Get the selected model year
+        
+        // Fetch model extras based on selected make, model, and modelyear
+        if (make && model && year) {
+            fetchModelExtras(make, model, year, row);
+        }
+    });
+
+    $('#vehicleTable').on('change', '.state', function () {
+        const state = $(this).val();
+        const row = $(this).closest('tr');
+        fetchRegions(state, row);
+    });
+}
+
+// Function to populate dropdowns
+function populateDropdowns(options) {
+    // Add 'Select a Value' as the default option
+    const defaultOption = ['Select a Value'];
+
+    // Populate the dropdowns in the first row
+    $('#vehicleTable .make').html(generateOptions(defaultOption.concat(options.make)));
+    $('#vehicleTable .state').html(generateOptions(defaultOption.concat(options.state)));
+    $('#vehicleTable .condition').html(generateOptions(defaultOption.concat(options.condition)));
+    $('#vehicleTable .paintcolor').html(generateOptions(defaultOption.concat(options.paint_color)));
+}
+
+// Function to add new row
+function addRow(options, selectedValues = {}) {
+    // Ensure selectedValues is not undefined and has default values
+    selectedValues = {
+        make: selectedValues.make || '',
+        state: selectedValues.state || '',
+        condition: selectedValues.condition || '',
+        paint_color: selectedValues.paint_color || ''
+    };
+
+    const defaultOption = ['Select a Value'];
+
+    $('#vehicleTable').append(`
+        <tr>
+            <td><button class="cloneRow">Clone</button></td>
+            <td><button class="removeRow">Remove</button></td>
+            <td><select class="make">${generateOptions(defaultOption.concat(options.make), selectedValues.make)}</select></td>
+            <td><select class="model"></select></td>
+            <td><select class="modelyear"></select></td>
+            <td><select class="series"></select></td>
+            <td><select class="trim"></select></td>
+            <td><select class="displacementcc"></select></td>  
+            <td><select class="enginecylinders"></select></td>            
+            <td><select class="drivetype"></select></td>
+            <td><select class="fueltypeprimary"></select></td>
+            <td><select class="state">${generateOptions(defaultOption.concat(options.state), selectedValues.state)}</select></td>
+            <td><select class="region"></select></td>
+            <td><select class="condition">${generateOptions(defaultOption.concat(options.condition), selectedValues.condition)}</select></td>
+            <td><select class="paintcolor">${generateOptions(defaultOption.concat(options.paint_color), selectedValues.paint_color)}</select></td>
+            <td><input type="number" class="dayssince"></td>
+            <td><input type="number" class="odometer"></td>
+            <td><span class="predictedprice"></span></td>
+            <td><button class="predict">Predict</button></td>
+        </tr>
+    `);
+
+    // Reinitialize cascading dropdowns after adding new row
+    initCascadingDropdowns();
+    
+    // Event listener for removing a row when the Remove button is clicked
+    $('#vehicleTable').on('click', '.removeRow', function () {
+        $(this).closest('tr').remove(); // Remove the row containing the clicked Remove button
+    });
+
+    // Function to clone a row
+    $('#vehicleTable').on('click', '.cloneRow', function () {
+        var row = $(this).closest('tr');
+        
+        // Clone the row
+        var clonedRow = row.clone();
+
+        // Copy over selected values for each dropdown
+        clonedRow.find('select').each(function () {
+            var originalDropdown = row.find('select.' + $(this).attr('class'));
+            $(this).val(originalDropdown.val());
         });
+
+        // Re-initialize cascading dropdowns (e.g., Make -> Model) for the cloned row
+        clonedRow.find('.make').trigger('change');
+        
+        // Append the cloned row to the table
+        $('#vehicleTable').append(clonedRow);
+
+        // Reinitialize cascading dropdowns for the cloned row
+        initCascadingDropdowns();
+    });
+    $('#vehicleTable').on('click', '.predict', function () {
     
-        // Handle Search by VIN
-        document.getElementById('searchVin').addEventListener('click', () => {
-            const vin = document.getElementById('vin').value.trim();
+    var row = $(this).closest('tr');
+    
+    // Get selected values from dropdowns and input fields
+    var make = row.find('.make').val();
+    var model = row.find('.model').val();
+    var model_year = row.find('.modelyear').val();
+    var series = row.find('.series').val();
+    var trim = row.find('.trim').val();
+    var displ = row.find('.displacementcc').val();
+    var enginecylinders = row.find('.enginecylinders').val();
+    var drivetype = row.find('.drivetype').val();
+    var fueltypeprimary = row.find('.fueltypeprimary').val();
+    var state = row.find('.state').val();
+    var region = row.find('.region').val();
+    var condition = row.find('.condition').val();
+    var paint_color = row.find('.paintcolor').val();
+    var days_since = row.find('.dayssince').val();
+    var odometer = row.find('.odometer').val();
 
-            if (!vin) {
-                alert("Please enter a VIN.");
-                return;
+    // Validation
+    if (!make || !model || !model_year || !series || !trim || !enginecylinders || !displ || !drivetype || !fueltypeprimary || !state || !region || !condition || !paint_color || !days_since || !odometer) {
+        alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.");
+        return;
+    }
+
+    // Validate if days_since and odometer are integers
+    if (isNaN(days_since) || isNaN(odometer) || days_since <= 0 || odometer <= 0) {
+        alert("Please enter valid integers for 'Days Since' and 'Odometer'.");
+        return;
+    }
+
+    // Prepare data to send to the Flask route
+    var data = {
+        make: make,
+        model: model,
+        model_year: model_year,
+        series: series,
+        trim: trim,
+        displacementcc: displ,
+        enginecylinders: enginecylinders,
+        drivetype: drivetype,
+        fueltype_primary: fueltypeprimary,
+        state: state,
+        region: region,
+        condition: condition,
+        paint_color: paint_color,
+        days_since: days_since,
+        odometer: odometer
+    };
+
+    // AJAX call to Flask route for prediction
+    $.ajax({
+            url: '/predict_price',
+            method: 'POST',
+            data: data,
+            success: function (response) {
+                // Format predicted price as an integer with commas
+                const formattedPrice = '$' + response.predicted_price.toLocaleString();
+                // Display formatted price in the respective row
+                row.find('.predictedprice').text(formattedPrice);
+            },
+            error: function () {
+                alert('Error predicting price. Please try again.');
             }
-
-            fetch('/search_vin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ vin: vin })
-            })
-            .then(response => response.json())  // Parse the response as JSON
-            .then(data => {
-                if (data.error) {
-                    document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
-                } else {
-                    // Update the dynamicResults div with the plot image
-                    if (data.plot_img) {
-                        const plotImage = `<img src="data:image/png;base64,${data.plot_img}" alt="Generated Plot" />`;
-                        document.getElementById('dynamicResults').innerHTML = plotImage;
-                    }
-
-                    // Display the styled table if it's present in the response
-                    if (data.html_table) {
-                        // Insert the HTML table with styles into the page
-                        document.getElementById('dynamicResults').innerHTML += data.html_table;
-                    }
-                }
-            })
-            .catch(error => console.error('Error:', error));
         });
+});
+}
 
-    // Event delegation to handle dynamically added buttons
-    document.addEventListener('click', function (event) {
-        if (event.target && event.target.classList.contains('select-button')) {
-            const vin = event.target.getAttribute('data-vin');
 
-            fetch('/search_vin', {
+function generateOptions(values) {
+    console.log('Values passed to generateOptions:', values); // Debugging
+    // Ensure values is an array, default to an empty array if undefined or null
+    values = Array.isArray(values) ? values : [];
+    return values.map(value => `<option value="${value}">${value}</option>`).join('');
+}
+
+function fetchModels(make, row) {
+    $.ajax({
+        url: '/get-models',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ make }),
+        dataType: 'json',
+        success: function (data) {
+            // Add the default option before generating the rest
+            const defaultOption = ['Select a Model'];
+            const models = generateOptions(defaultOption.concat(data.models));
+            row.find('.model').html(models);
+        },
+        error: function (xhr, status, error) {
+            console.error('Error fetching models:', error);
+        }
+    });
+}
+
+function populateAndLockIfSingleOption(selectElement, options) {
+    selectElement.html(generateOptions(options));
+
+    // Check if there's only one real option besides the default
+    if (options.length === 2 && options[0].startsWith('Select')) {
+        selectElement.val(options[1]); // Automatically select the only valid option
+        selectElement.prop('disabled', true); // Disable the dropdown
+    } else {
+        selectElement.val(''); // Ensure default option is selected initially
+        selectElement.prop('disabled', false); // Enable the dropdown
+    }
+}
+
+function fetchModelYear(make, model, row) {
+    $.ajax({
+        url: '/get_model_year',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ make, model }),
+        dataType: 'json',
+        success: function (data) {
+            if (data.modelyear) {
+                data.modelyear.sort((a, b) => a - b); // Sort model years numerically
+                const modelYearSelect = row.find('.modelyear');
+                populateAndLockIfSingleOption(modelYearSelect, ['Select a Model Year'].concat(data.modelyear));
+                modelYearSelect.change(); // Trigger the next fetch if needed
+            } else {
+                console.error('Model year data is missing');
+            }
+        },
+        error: function (xhr, status, error) {
+            console.error('Error fetching model year:', error);
+        }
+    });
+}
+
+
+function fetchModelExtras(make, model, modelyear, row) {
+    $.ajax({
+        url: '/get_model_extras',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ make, model, modelyear }),
+        dataType: 'json',
+        success: function (data) {
+            if (data.series) {
+                const seriesSelect = row.find('.series');
+                const trimSelect = row.find('.trim');
+                const driveTypeSelect = row.find('.drivetype');
+                const engineCylindersSelect = row.find('.enginecylinders');
+                const fuelTypePrimarySelect = row.find('.fueltypeprimary');
+                const displacementSelect = row.find('.displacementcc');
+                populateAndLockIfSingleOption(displacementSelect, ['Select a displacement'].concat(data.displacementcc));
+                populateAndLockIfSingleOption(seriesSelect, ['Select a Series'].concat(data.series));
+                populateAndLockIfSingleOption(trimSelect, ['Select a Trim'].concat(data.trim));
+                populateAndLockIfSingleOption(driveTypeSelect, ['Select a Drive Type'].concat(data.drivetype));
+                populateAndLockIfSingleOption(engineCylindersSelect, ['Select Engine Cylinders'].concat(data.enginecylinders));
+                populateAndLockIfSingleOption(fuelTypePrimarySelect, ['Select a Fuel Type'].concat(data.fueltypeprimary));
+            } else {
+                console.error('Model extras data is missing');
+            }
+        },
+        error: function (xhr, status, error) {
+            console.error('Error fetching model extras:', error);
+        }
+    });
+}
+function fetchRegions(state, row) {
+    $.ajax({
+        url: '/get_states_regions',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ state }),
+        dataType: 'json',
+        success: function (data) {
+            const defaultOption = ['Select a Region'];
+            row.find('.region').html(generateOptions(defaultOption.concat(data)));
+        },
+        error: function (xhr, status, error) {
+            console.error('Error fetching regions:', error);
+        }
+    });
+}
+            // Handle Search by Make/Model/Year
+            document.getElementById('searchMakeModelYear').addEventListener('click', () => {
+                const makeModelYear = document.getElementById('makeModelYear').value.trim();
+        
+                if (!makeModelYear) {
+                    alert("Please enter Make, Model, and Year.");
+                    return;
+                }
+        
+                fetch('/search_make_model_year', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ make_model_year: makeModelYear })
+                })
+                .then(response => response.json())  // Parse the response as JSON
+                .then(data => {
+                    // Ensure only dynamicResults2 is updated
+                    document.getElementById('dynamicResults').innerHTML = ''; // Clear the other container
+                    if (data.error) {
+                        document.getElementById('dynamicResults2').innerHTML = `<p class="error">${data.error}</p>`;
+                    } else {
+                        document.getElementById('dynamicResults2').innerHTML = data.html;
+        
+                        // Dynamically update the form's action URL for form submission
+                        const form = document.getElementById('vehicle-selection-form');
+                        form.setAttribute('action', data.process_selection_url);  // Set the action URL
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        
+            // Handle Search by VIN
+            document.getElementById('searchVin').addEventListener('click', () => {
+                const vin = document.getElementById('vin').value.trim();
+        
+                if (!vin) {
+                    alert("Please enter a VIN.");
+                    return;
+                }
+        
+                fetch('/search_vin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ vin: vin })
@@ -274,7 +615,7 @@
                             const plotImage = `<img src="data:image/png;base64,${data.plot_img}" alt="Generated Plot" />`;
                             document.getElementById('dynamicResults').innerHTML = plotImage;
                         }
-
+        
                         // Display the styled table if it's present in the response
                         if (data.html_table) {
                             // Insert the HTML table with styles into the page
@@ -282,55 +623,83 @@
                         }
                     }
                 })
-            .catch(error => console.error('Error:', error));
-        }
-    });
-
-    $(document).ready(function() {
-    // Event delegation for the "Clone" button
-    $(document).on('click', '.clone-button', function() {
-        var row = $(this).closest('tr'); // Get the row that contains the button
-        var clonedRow = row.clone(); // Clone the row
-        row.after(clonedRow); // Append the cloned row directly after the original row
-    });
-
-    // Event delegation for the "Update Prediction" button
-    $(document).on('click', '.update-prediction', function() {
-        var rowIndex = $(this).data("row-index");
-        var odometer = $("select[name='odometer'][data-row-index='" + rowIndex + "']").val();
-        var paintColor = $("select[name='paint_color'][data-row-index='" + rowIndex + "']").val();
-        var state = $("select[name='state'][data-row-index='" + rowIndex + "']").val();
-        var condition = $("select[name='condition'][data-row-index='" + rowIndex + "']").val();
-
-        $.ajax({
-            url: '/update_prediction',
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({
-                index: rowIndex,
-                odometer: odometer,
-                paint_color: paintColor,
-                state: state,
-                condition: condition
-            }),
-            success: function(response) {
-                if (response.success) {
-                    // Update the predicted price in the HTML
-                    $("span.predicted-price[data-row-index='" + rowIndex + "']").text(response.predicted_price);
-                } else {
-                    alert("Error updating prediction: " + response.error);
+                .catch(error => console.error('Error:', error));
+            });
+        
+            // Event delegation to handle dynamically added buttons
+            document.addEventListener('click', function (event) {
+                if (event.target && event.target.classList.contains('select-button')) {
+                    const vin = event.target.getAttribute('data-vin');
+        
+                    fetch('/search_vin', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ vin: vin })
+                        })
+                        .then(response => response.json())  // Parse the response as JSON
+                        .then(data => {
+                            if (data.error) {
+                                document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
+                            } else {
+                                // Update the dynamicResults div with the plot image
+                                if (data.plot_img) {
+                                    const plotImage = `<img src="data:image/png;base64,${data.plot_img}" alt="Generated Plot" />`;
+                                    document.getElementById('dynamicResults').innerHTML = plotImage;
+                                }
+        
+                                // Display the styled table if it's present in the response
+                                if (data.html_table) {
+                                    // Insert the HTML table with styles into the page
+                                    document.getElementById('dynamicResults').innerHTML += data.html_table;
+                                }
+                            }
+                        })
+                    .catch(error => console.error('Error:', error));
                 }
-            },
-            error: function() {
-                alert("Error updating prediction.");
-            }
-        });
-    });
-});
+            });
+        
+            $(document).ready(function() {
+                // Delegate event for dynamically added elements (update-prediction)
+                $(document).on('click', '.update-prediction', function() {
+                    var rowIndex = $(this).data("row-index");
+                    var odometer = $("select[name='odometer'][data-row-index='" + rowIndex + "']").val();
+                    var paintColor = $("select[name='paint_color'][data-row-index='" + rowIndex + "']").val();
+                    var state = $("select[name='state'][data-row-index='" + rowIndex + "']").val();
+                    var condition = $("select[name='condition'][data-row-index='" + rowIndex + "']").val();
+        
+                    $.ajax({
+                        url: '/update_prediction',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            index: rowIndex,
+                            odometer: odometer,
+                            paint_color: paintColor,
+                            state: state,
+                            condition: condition
+                        }),
+                        success: function(response) {
+                            if (response.success) {
+                                // Update the predicted price in the HTML
+                                $("span.predicted-price[data-row-index='" + rowIndex + "']").text(response.predicted_price);
+                            } else {
+                                alert("Error updating prediction: " + response.error);
+                            }
+                        },
+                        error: function() {
+                            alert("Error updating prediction.");
+                        }
+                    });
+                });
+        
+                // Delegate event for dynamically added elements (clone-button)
+                $(document).on('click', '.clone-button', function() {
+                    var newRow = $(this).closest('tr').clone();
+                    $('#dynamicResults').append(newRow);
+                });
+            });
 
-
-
-
-</script>    
+        </script>
+        
 </body>
 </html>

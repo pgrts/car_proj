@@ -1,28 +1,19 @@
-# Use an official Python image as a base
 FROM python:3.9-slim
 
-# Set the working directory
+# Copy the app and data folder into the container
+COPY . /app
+
+# Make sure the data directory is included
 WORKDIR /app
 
-# Copy only requirements initially to leverage Docker cache
-COPY requirements.txt .
-
-# Install required packages
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the current directory contents into the container at /app
-COPY . .
+# Create the directory for the SQLite database
+RUN mkdir -p /app/data
 
-# Environment variables for Flask and Postgres
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=development
-ENV DB_HOST=d
-ENV DB_PORT=5432
-ENV DB_USER=postgres
-ENV DB_PASSWORD=${DB_PASSWORD} 
+# Expose the port that Gunicorn will run on
+EXPOSE 8000
 
-# Expose the port the app runs on
-EXPOSE 5000
-
-# Run Flask app
-CMD ["flask", "run", "--host=0.0.0.0"]
+# Run Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
