@@ -1260,6 +1260,7 @@ def dump_backup(substring, user='postgres', password=db_password, host='localhos
                 print(f"Table {table} deleted after backup.")
 
     print("Backup process completed.")
+    return True
 
 def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval=2):
     listings_query = text(f'''
@@ -1406,7 +1407,7 @@ def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval
 
 
 
-datestr = '2024-12-01'
+datestr = '2024-12-02'
 datestr_sql = '_' + datestr.replace('-', '_')
 source_db_url = f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars'
 backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'

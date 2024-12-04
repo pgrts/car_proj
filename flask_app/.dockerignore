@@ -2,4 +2,5 @@
 venv/
 venv-wsl/
 __pycache__/
-
+cbm/
+data/

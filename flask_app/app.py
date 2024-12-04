@@ -393,105 +393,70 @@ def predict_price():
         enginecylinders += '.0'
 
     mask = df_vehicles
-    print(mask["enginecylinders"].unique())
+
     mask_length = len(mask)
-    
-    while mask_length > 1:
-        # Step-by-step condition filtering
-        mask = mask[mask["enginecylinders"].astype(str) == enginecylinders.strip()]
-        print(f"Rows after filtering by enginecylinders: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
+    set_cols = {}
 
-        mask = mask[mask["make"] == make]
-        print(f"Rows after filtering by make: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
+    filter_conditions = [
+        ("make", make),
+        ("model", model),
+        ("modelyear", float(modelyear)),
+        ("series", series),
+        ("trim", trim),
+        ("fueltypeprimary", fueltypeprimary),
+        ("drivetype", drivetype),
+        ("enginecylinders", enginecylinders.strip()),
+        ("displacementcc", None if displacementcc == 'None' else float(displacementcc))
+    ]
 
+    # Iterate through the filter conditions
+    for column, value in filter_conditions[:]:
+        if mask_length <= 1:
+            break  # Stop if only one row remains
 
-        mask = mask[mask["model"] == model]
-        print(f"Rows after filtering by model: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
+        # Save the current mask before applying the filter
+        previous_mask = mask.copy()
 
-
-        mask = mask[mask["modelyear"] == float(modelyear)]
-        print(f"Rows after filtering by modelyear: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        mask = mask[mask["series"] == series]
-        print(f"Rows after filtering by series: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        mask = mask[mask["trim"] == trim]
-        print(f"Rows after filtering by trim: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-        
-
-        if displacementcc == 'None':
+        # Apply the filter condition
+        if column == "displacementcc" and value is None:
             mask = mask[mask["displacementcc"].isnull()]
         else:
-            mask = mask[mask["displacementcc"].astype(float) == float(displacementcc)]
-        print(f"Rows after filtering by displacementcc: {len(mask)}")
+            mask = mask[mask[column].astype(str) == str(value)]
+
         mask_length = len(mask)
-        if mask_length < 2:
+        print(f"Rows after filtering by {column}: {mask_length}")
+
+        if mask_length == 1:
+            print("Single row found, stopping the loop.")
             break
-
-
-        mask = mask[mask["drivetype"] == drivetype]
-        print(f"Rows after filtering by drivetype: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        if fueltypeprimary == None:
-            print('Fuel Type None')
-        else:
-            mask = mask[mask["fueltypeprimary"] == fueltypeprimary]
-        print(f"Rows after filtering by fueltypeprimary: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        if mask_length > 1:
-            mask = mask.head(1)
-            break
-        
         if mask_length == 0:
-            print('error with masking')
-            return
+            print(f"No matches found for {column}, reverting to previous state.")
+            mask = previous_mask  # Restore the mask to the state before filtering
+            mask_length = len(previous_mask)
+            filter_conditions.remove((column, value)) # remove condition that had no matches
+            print(filter_conditions)
+            set_cols[column] = value
+        
 
     state_income = state_income_map[state]
 
-    if len(mask) == 1:
-        mask['state_income'] = state_income
-        mask["state"] = state
-        mask["region"] = region
-        mask["condition"] = condition
-        mask["paint_color"] = paint_color
-        mask["days_since"] = days_since
-        mask["odometer"] = odometer
+    if len(mask) > 1:
+        mask = mask.head(1)
+        
+    mask['state_income'] = state_income
+    mask["state"] = state
+    mask["region"] = region
+    mask["condition"] = condition
+    mask["paint_color"] = paint_color
+    mask["days_since"] = days_since
+    mask["odometer"] = odometer
 
-        print("Final row with new values:")
-        print(mask)
+    for col, val in set_cols.items():
+        print(f'setting {col} to {val}')
+        mask[col] = val
 
-    else:
-        print("No unique row found.")
-
-
+    print("Final row with new values:")
+    print(mask)        
     pred = cb72.predict(mask[cats+nums])[0].round().astype(int)
 
     # Return the prediction
@@ -537,88 +502,57 @@ def compare_price():
     print(f"days_since: {days_since}, type: {type(days_since)}")
     print(f"odometer: {odometer}, type: {type(odometer)}")
 
-    mask = df_vehicles
+
     if len(enginecylinders) == 1:
         enginecylinders += '.0'
-    print(mask["enginecylinders"].unique())
+
+    mask = df_vehicles
+
     mask_length = len(mask)
-    
-    while mask_length > 1:
+    set_cols = {}
 
-        mask = mask[mask["enginecylinders"].astype(str) == enginecylinders.strip()]
-        print(f"Rows after filtering by enginecylinders: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
+    filter_conditions = [
+        ("displacementcc", None if displacementcc == 'None' else float(displacementcc)),
+        ("make", make),
+        ("model", model),
+        ("modelyear", float(modelyear)),
+        ("series", series),
+        ("trim", trim),
+        ("fueltypeprimary", fueltypeprimary),
+        ("drivetype", drivetype),
+        ("enginecylinders", enginecylinders.strip())
+    ]
 
-        mask = mask[mask["make"] == make]
-        print(f"Rows after filtering by make: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
+    # Iterate through the filter conditions
+    for column, value in filter_conditions:
+        if mask_length <= 1:
+            break  # Stop if only one row remains
 
+        # Save the current mask before applying the filter
+        previous_mask = mask.copy()
 
-        mask = mask[mask["model"] == model]
-        print(f"Rows after filtering by model: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        mask = mask[mask["modelyear"] == float(modelyear)]
-        print(f"Rows after filtering by modelyear: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        mask = mask[mask["series"] == series]
-        print(f"Rows after filtering by series: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        mask = mask[mask["trim"] == trim]
-        print(f"Rows after filtering by trim: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-        
-
-        if displacementcc == 'None':
+        # Apply the filter condition
+        if column == "displacementcc" and value is None:
             mask = mask[mask["displacementcc"].isnull()]
         else:
-            mask = mask[mask["displacementcc"] == float(displacementcc)]
-        print(f"Rows after filtering by displacementcc: {len(mask)}")
+            mask = mask[mask[column].astype(str) == str(value)]
+
         mask_length = len(mask)
-        if mask_length < 2:
-            break
+        print(f"Rows after filtering by {column}: {mask_length}")
 
-
-        mask = mask[mask["drivetype"] == drivetype]
-        print(f"Rows after filtering by drivetype: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        if fueltypeprimary == None:
-            print('Fuel Type None')
-        else:
-            mask = mask[mask["fueltypeprimary"] == fueltypeprimary]
-        print(f"Rows after filtering by fueltypeprimary: {len(mask)}")
-        mask_length = len(mask)
-        if mask_length < 2:
-            break
-
-
-        if mask_length > 1:
-            mask = mask.head(1)
+        if mask_length == 1:
+            print("Single row found, stopping the loop.")
             break
         if mask_length == 0:
-            print('error with masking')
-            return
+            print(f"No matches found for {column}, reverting to previous state.")
+            mask = previous_mask  # Restore the mask to the state before filtering
+            mask_length = len(previous_mask)
+            set_cols[column] = value
+        
+
+    for col, val in set_cols.items():
+        mask[col] = val
+
     state_income = state_income_map[state]
 
     features = mask[cats+nums]
@@ -781,7 +715,6 @@ def compare_price():
     """
 
     return jsonify({'plot_img': plot_img, 'html_table': styled_table_html})
-    return create_plot(mask[cats+nums])
 
 def get_json(url):
     try:

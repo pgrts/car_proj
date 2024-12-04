@@ -3,12 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: flasky2
+    container_name: flasky3
     expose:
       - "8000"  # Expose Gunicorn's port inside the container
     volumes:
-      - ./cbm:/app/cbm          # Mount cbm folder to /app/cbm in the container
-      - ./data:/app/data
+      - cbm_volume:/app/cbm        # Mount cbm volume to /app/cbm inside the container
+      - data_volume:/app/data      # Mount data volume to /app/data inside the container
     environment:
       - FLASK_APP=app.py 
     # No need to add depends_on here since Nginx doesn't depend on the web service.
@@ -25,4 +25,6 @@ services:
     depends_on:
       - web  # Make sure Nginx waits for the Flask app to be ready
 
-
+volumes:
+  cbm_volume: {}  # Named volume for the cbm folder
+  data_volume: {} # Named volume for the data folder
