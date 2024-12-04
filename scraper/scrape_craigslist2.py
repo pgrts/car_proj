@@ -617,7 +617,8 @@ def divert_outliers(df):
         # Update bad_index and good_index
         bad_index.update(outlier_indices)
         good_index.difference_update(outlier_indices)
-    
+        print(model_file)
+        print(pred_col)
     # Create DataFrames for good and bad rows
     good_df = df.loc[good_index]
     bad_df = df.loc[bad_index]
@@ -1260,7 +1261,152 @@ def dump_backup(substring, user='postgres', password=db_password, host='localhos
 
     print("Backup process completed.")
 
-datestr = '2024-11-31'
+def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval=2):
+    listings_query = text(f'''
+
+    WITH latest_data AS (WITH ranked_data AS (
+        SELECT *, 
+            ROW_NUMBER() OVER (
+                PARTITION BY vin, odometer 
+                ORDER BY posting_date DESC
+            ) AS row_num
+        FROM {main_table}
+    )
+    SELECT *
+    FROM ranked_data
+    WHERE row_num = 1)
+
+    SELECT odometer, bodyclass, drivetype, enginecylinders, modelyear, series, trim, posting_date, make, model, price, link, 
+            {pred_col}  as predicted_price, 
+            (({pred_col} - price)) as residual, state, region
+    FROM latest_data
+    WHERE posting_date >= CURRENT_DATE - INTERVAL '{interval} days'
+
+    ORDER BY residual DESC
+''')
+    price_change_query = text(f'''SELECT DISTINCT 
+        n.state,
+        n.odometer as "new_odometer",
+        b.odometer as "old_odometer",
+        n.make, 
+        n.model, 
+        n.modelyear, 
+        n.{pred_col} as "predicted_price",
+        -- Ensure that new_price is always the later price (higher posting_date)
+        CASE 
+            WHEN n.posting_date > b.posting_date THEN n.price 
+            ELSE b.price
+        END AS "new_price", 
+        -- Ensure that old_price is always the earlier price (older posting_date)
+        CASE 
+            WHEN n.posting_date > b.posting_date THEN b.price
+            ELSE n.price
+        END AS "old_price", 
+        -- Ensure that new_posting_date is the later posting_date
+        CASE 
+            WHEN n.posting_date > b.posting_date THEN n.posting_date
+            ELSE b.posting_date
+        END AS "new_posting_date", 
+        -- Ensure that old_posting_date is the earlier posting_date
+        CASE 
+            WHEN n.posting_date > b.posting_date THEN b.posting_date
+            ELSE n.posting_date
+        END AS "old_posting_date",
+        n.vin, 
+        n.link AS "new_link", 
+        b.link AS "old_link",
+        n.date_scraped AS "new_date_scraped",
+        b.date_scraped AS "old_date_scraped",
+        -- Adjust price_drop calculation based on the ordering of price and dates
+        CASE 
+            WHEN n.date_scraped > b.date_scraped THEN n.price - b.price
+            WHEN b.date_scraped > n.date_scraped THEN b.price - n.price
+            ELSE 0
+        END AS price_drop,
+        n.series, 
+        n.trim,
+        n.drivetype,
+        n.bodyclass,
+        n.enginecylinders
+    FROM {main_table} n
+    JOIN {main_table} b ON n.vin = b.vin
+    WHERE n.price != b.price
+    AND n.posting_date > b.posting_date
+    AND LENGTH (n.vin) = 17
+    ORDER BY "new_posting_date" DESC
+    ''')
+      
+    with engine.connect() as conn:
+        price_df = pd.read_sql(price_change_query, conn)
+        car_test_df = pd.read_sql_query(text(f"select * FROM car_test"), conn)[cats+nums+['vin']]
+        current_unique_veh = pd.read_sql_query(text(f"select * FROM unique_vehicles_current"), conn)[cats+nums+['vin']]
+        list_df = pd.read_sql(listings_query, conn)
+    vin_cols = [x for x in car_test_df.columns if x not in
+    ['drive', 'link', 'price', 'odometer', 'days_since', 'state', 'region', 'state_income', 'condition', 
+    'paint_color', 'title', 'link', 'location', 'drive', 'type', 'title_status', 'transmission', 'fuel', 'region_url', 'geo_placename',
+    'reference_date', 'date_scraped', 'vin', 'posting_date', 'car_id'] + pred_cols]
+
+    distinct_veh = car_test_df.drop_duplicates(subset=vin_cols)[cats+nums+['vin']]
+
+    distinct_veh2 = pd.concat([car_test_df[cats+nums+['vin']], distinct_veh]).drop_duplicates(subset=vin_cols)[cats+nums+['vin']]
+
+    for num in nums:
+        distinct_veh2[num] = distinct_veh2[num].apply(
+            lambda x: str(int(x)) if pd.notnull(x) and x.is_integer() else str(x)
+        )
+
+    for num in nums:
+        if num in price_df.columns:
+            price_df[num] = price_df[num].apply(
+                lambda x: str(int(x)) if pd.notnull(x) and x.is_integer() else str(x)
+            )
+        if num in list_df.columns:
+            list_df[num] = list_df[num].apply(
+                lambda x: str(int(x)) if pd.notnull(x) and x.is_integer() else str(x)
+            )        
+    price_df['price_drop'] = price_df['price_drop']*-1
+
+    price_df['new_posting_date'] = pd.to_datetime(price_df['new_posting_date']).dt.date
+    price_df['old_posting_date'] = pd.to_datetime(price_df['old_posting_date']).dt.date
+
+    price_df = price_df.drop_duplicates(subset=['state', 'vin', 'new_price'])
+
+
+    with seql_engine.connect() as conn:
+        # Execute the SELECT query to count the rows in the table
+        result = conn.execute(text("SELECT COUNT(*) FROM unique_vehicles"))
+        row = result.fetchone()  # Fetch the first row of the result
+        print(f"Number of rows in unique_vehicles: {row[0]}")
+
+        result = conn.execute(text("SELECT COUNT(*) FROM price_changes"))
+        row = result.fetchone()  # Fetch the first row of the result
+        print(f"Number of rows in price_changes: {row[0]}")
+
+        result = conn.execute(text("SELECT COUNT(*) FROM latest_listings"))
+        row = result.fetchone()  # Fetch the first row of the result
+        print(f"Number of rows in latest_listings: {row[0]}")        
+
+    distinct_veh2.to_sql('unique_vehicles', seql_engine, index=False, if_exists='replace')
+    list_df.to_sql('latest_listings', seql_engine, index=False, if_exists='replace')
+    price_df.to_sql('price_changes', seql_engine, index=False, if_exists='replace')
+
+    with seql_engine.connect() as conn:
+        # Execute the SELECT query to count the rows in the table
+        result = conn.execute(text("SELECT COUNT(*) FROM unique_vehicles"))
+        row = result.fetchone()  # Fetch the first row of the result
+        print(f"Number of rows in unique_vehicles: {row[0]}")
+
+        result = conn.execute(text("SELECT COUNT(*) FROM price_changes"))
+        row = result.fetchone()  # Fetch the first row of the result
+        print(f"Number of rows in price_changes: {row[0]}")
+
+        result = conn.execute(text("SELECT COUNT(*) FROM latest_listings"))
+        row = result.fetchone()  # Fetch the first row of the result
+        print(f"Number of rows in latest_listings: {row[0]}")
+
+
+
+datestr = '2024-12-01'
 datestr_sql = '_' + datestr.replace('-', '_')
 source_db_url = f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars'
 backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'
@@ -1268,6 +1414,9 @@ backup_zip_path = f'C:\\Users\\pgrts\\Desktop\\python\\car_proj\\scraper\\backup
 engine = create_engine(source_db_url)
 
 main_data = 'car_test'
+
+db_path = os.path.abspath('../flask_app/data/car_db.db')  # Adjust '../' if more levels are needed
+seql_engine = create_engine(f'sqlite:///{db_path}')
 
 
 if do_lots_stuff(main_data, datestr, engine):
@@ -1281,8 +1430,10 @@ if do_lots_stuff(main_data, datestr, engine):
         'new_data' + datestr_sql, engine,
             main_data = main_data):
         print('reject complete')
-        dump_backup(substring=datestr_sql, delete_after_backup=True)
-        print('backup dumped')
+        if dump_backup(substring=datestr_sql, delete_after_backup=True):
+            print('backup dumped')
+            update_sqlite(engine, seql_engine, pred_col = pred_cols[-1], main_table='car_test')
+            print('sqlite update')
 
 def restore_all_dumps(substring, user='postgres', password=db_password, host='localhost', port='5432', db_name='cars'):
     # Backup directory based on substring

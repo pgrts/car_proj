@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Craigs Cars</title>
-    <h1><a href="#" id="clearDynamicContent">Craigs Cars</a></h1>
+    <div class="subheading">
+        <img src="{{ url_for('static', filename='images/craigs_cars_small.png') }}" alt="Craigs Cars Logo" class="logo">
+        <p><strong class="subheading-title">Used Car Market Data Dashboard</strong> <br>An evolving data platform that tracks new vehicle listings on Craigslist. Updated daily, it monitors price fluctuations and offers detailed analysis of regional and time-series differences across a growing database of vehicles. Discover insights and trends in real-time as you explore the data.</p>
+    </div>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.css">
     <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
@@ -15,7 +18,23 @@
             padding: 0;
             box-sizing: border-box;
         }
-    
+        select {
+            appearance: none;            /* Standard for most browsers */
+        -webkit-appearance: none;    /* Chrome/Safari */
+        -moz-appearance: none;       /* Firefox */
+            width: auto;
+            max-width: 100%;  /* Prevent from stretching */
+            padding: 5px;
+            font-size: inherit;
+        }
+
+
+/* Logo styling */
+.logo {
+    width: 250px;             /* Fixed width of the logo */
+    height: 250px;            /* Fixed height of the logo */
+    object-fit: cover;        /* Ensures the image fits inside the logo container without stretching */
+}
         html, body {
             height: 100%;
             font-family: Arial, sans-serif;
@@ -29,7 +48,35 @@
             padding-top: 20px;
             color: #333;
         }
-    
+/* Subheading styles with gradient background and title styling for the subheading */
+.subheading {
+    margin-top: 20px;
+    background: radial-gradient(circle,  #b3cde0, #f0f8ff); /* Light blue gradient */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    font-family: Arial, sans-serif;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.subheading p {
+    font-size: 1.1em;
+    color: #333333;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.subheading .subheading-title {
+    font-size: 2em;  /* Make it like a title */
+    font-weight: bold;
+    color: #004d7f;
+    margin-bottom: 10px;
+}
+
         /* Container styling for centering and maximum width */
         .container {
             max-width: 1200px;
@@ -41,25 +88,35 @@
             border-radius: 8px;
         }
 
-        #toolContainer {
-            width: 100%;
-        }
+
     /* Table styling */
     #vehicleTable {
-        width: 100%; /* Table takes 100% width of container */
+        width: 100%; 
         border-collapse: collapse; /* Remove spacing between cells */
-        margin-top: 20px; /* Add space above the table */
+        margin-top: 10px; /* Add space above the table */
         table-layout: fixed; /* Ensure columns take up equal space */
     }
 
     /* Ensure table cells and headers have proper styling */
     #vehicleTable td, #vehicleTable th {
-        padding: 8px;
-        text-align: left;
+        text-align: center;
         border: 1px solid #ccc;
-        white-space: nowrap; /* Prevent text from wrapping */
+        word-wrap: break-word;  /* Breaks long words to wrap */
         overflow: hidden;    /* Ensure no overflow within cells */
         text-overflow: ellipsis; /* Add ellipsis if text overflows */
+        max-width: 40px;       /* Set maximum width per cell */
+    }
+
+    #vehicleTable th {
+        padding: 1px;
+        white-space: normal;  /* Allow text to wrap normally in cells */
+        background-color: #f2f2f2; /* Optional: Header background color */
+        font-size: 75%;
+    }
+    #vehicleTable td {
+        padding: 2px;
+        white-space: nowrap;  /* Allow text to wrap normally in cells */
+        font-size: 12px
     }
 
         /* Style for the header */
@@ -85,7 +142,6 @@
             background-color: #ff4d4d;
             color: white;
             border: none;
-            padding: 5px 10px;
             cursor: pointer;
         }
 
@@ -137,20 +193,41 @@
             color: #888;
             cursor: not-allowed;
         }
-        /* Footer styling */
-        footer {
-            width: 100%;
-            padding: 15px;
-            text-align: center;
-            background-color: #004d7f;
-            color: white;
-            margin-top: 40px;
-        }
-    
-        footer p {
-            margin: 0;
-            font-size: 1em;
-        }
+    footer {
+        width: 100%;
+        padding: 30px;
+        text-align: center;
+        background-color: #004d7f;
+        color: white;
+        margin-top: 40px;
+        font-family: Arial, sans-serif;
+    }
+
+    footer p {
+        margin: 10px 0;
+        font-size: 1em;
+    }
+
+    footer a {
+        color: #ffffff;
+        text-decoration: none;
+        font-weight: bold;
+        margin: 0 10px;
+    }
+
+    footer a:hover {
+        color: #ffcc00;
+    }
+
+    footer strong {
+        color: #ffcc00;
+        font-weight: bold;
+    }
+
+    footer p:last-child {
+        font-style: italic;
+        font-size: 0.9em;
+    }
     
         /* Table container styling (if needed) */
         #tableContainer {
@@ -200,11 +277,11 @@
     </style>    
 </head>
 <body>
-    <h1 id="vehicleModelTool" class="clickable-header">Vehicle Model Tool</h1>
-    <div id="toolContainer"></div>
+
 
     <div class="container">
-
+        <h1 id="vehicleModelTool" class="clickable-header">Vehicle Model Tool</h1>
+        <div id="toolContainer"></div>
         <!-- Search by VIN -->
         <form id="searchFormVin">
             <input type="text" name="vin" id="vin" placeholder="Enter VIN">
@@ -235,7 +312,16 @@
 
     <footer>
         <p>&copy; 2024 Craigs Cars. All rights reserved.</p>
+        <p>
+            <a href="https://github.com/pgrts/" target="_blank" rel="noopener noreferrer">GitHub</a> | 
+            <a href="https://www.linkedin.com/in/mitchell-gallagher-pg1" target="_blank" rel="noopener noreferrer">LinkedIn</a> | 
+            <a href="mailto:pgrtspgrtson@gmail.com">Email</a>
+        </p>
+        <p>Contact me: <strong>Mitchell Gallagher</strong> | Discord: <strong>178999578002063361</strong></p>
+
+        <p>If you would like to collaborate on any projects, feel free to reach out!</p>
     </footer>
+    
 
 
     <script>
@@ -265,8 +351,8 @@ function initCascadingDropdowns() {
         const make = $(this).val();
         
         // Reset the model and model year selections
-        row.find('.model').html('<option value="">Select a model</option>');  // Reset model dropdown
-        row.find('.modelyear').html('<option value="">Select a year</option>');  // Reset model year dropdown
+        row.find('.model').html('<option value="">Select</option>');  // Reset model dropdown
+        row.find('.modelyear').html('<option value="">Select</option>');  // Reset model year dropdown
 
         // Fetch new models based on selected make
         fetchModels(make, row);
@@ -276,7 +362,7 @@ function initCascadingDropdowns() {
         const row = $(this).closest('tr');
         const make = row.find('.make').val();
         const model = row.find('.model').val();
-        
+        row.find('.modelyear').html('<option value="">Select</option>');  // Reset model year dropdown
         // Only fetch model year if both make and model are selected
         if (make && model) {
             fetchModelYear(make, model, row);
@@ -289,6 +375,12 @@ function initCascadingDropdowns() {
         const model = row.find('.model').val();
         const year = $(this).val();  // Get the selected model year
         
+        row.find('.trim').html('<option value="">Select</option>');  // Reset model year dropdown
+        row.find('.series').html('<option value="">Select</option>');  // Reset model year dropdown
+        row.find('.fueltypeprimary').html('<option value="">Select</option>');  // Reset model year dropdown
+        row.find('.enginecylinders').html('<option value="">Select</option>');  // Reset model year dropdown
+        row.find('.drivetype').html('<option value="">Select</option>');  // Reset model year dropdown
+
         // Fetch model extras based on selected make, model, and modelyear
         if (make && model && year) {
             fetchModelExtras(make, model, year, row);
@@ -304,8 +396,7 @@ function initCascadingDropdowns() {
 
 // Function to populate dropdowns
 function populateDropdowns(options) {
-    // Add 'Select a Value' as the default option
-    const defaultOption = ['Select a Value'];
+    const defaultOption = ['Select'];
 
     // Populate the dropdowns in the first row
     $('#vehicleTable .make').html(generateOptions(defaultOption.concat(options.make)));
@@ -324,12 +415,12 @@ function addRow(options, selectedValues = {}) {
         paint_color: selectedValues.paint_color || ''
     };
 
-    const defaultOption = ['Select a Value'];
+    const defaultOption = ['Select'];
 
     $('#vehicleTable').append(`
         <tr>
-            <td><button class="cloneRow">Clone</button></td>
-            <td><button class="removeRow">Remove</button></td>
+            <td><button class="cloneRow">+</button></td>
+            <td><button class="removeRow">-</button></td>
             <td><select class="make">${generateOptions(defaultOption.concat(options.make), selectedValues.make)}</select></td>
             <td><select class="model"></select></td>
             <td><select class="modelyear"></select></td>
@@ -347,6 +438,7 @@ function addRow(options, selectedValues = {}) {
             <td><input type="number" class="odometer"></td>
             <td><span class="predictedprice"></span></td>
             <td><button class="predict">Predict</button></td>
+            <td><button class="compare">Compare</button></td>
         </tr>
     `);
 
@@ -381,34 +473,50 @@ function addRow(options, selectedValues = {}) {
         initCascadingDropdowns();
     });
     $('#vehicleTable').on('click', '.predict', function () {
-    
-    var row = $(this).closest('tr');
-    
-    // Get selected values from dropdowns and input fields
-    var make = row.find('.make').val();
-    var model = row.find('.model').val();
-    var model_year = row.find('.modelyear').val();
-    var series = row.find('.series').val();
-    var trim = row.find('.trim').val();
-    var displ = row.find('.displacementcc').val();
-    var enginecylinders = row.find('.enginecylinders').val();
-    var drivetype = row.find('.drivetype').val();
-    var fueltypeprimary = row.find('.fueltypeprimary').val();
-    var state = row.find('.state').val();
-    var region = row.find('.region').val();
-    var condition = row.find('.condition').val();
-    var paint_color = row.find('.paintcolor').val();
-    var days_since = row.find('.dayssince').val();
-    var odometer = row.find('.odometer').val();
+        var row = $(this).closest('tr');
+        $('.predict, .compare').prop('disabled', true);
+        
+        // Get selected values from dropdowns and input fields
+        var make = row.find('.make').val();
+        var model = row.find('.model').val();
+        var modelyear = row.find('.modelyear').val();
+        var series = row.find('.series').val();
+        var trim = row.find('.trim').val();
+        var displ = row.find('.displacementcc').val();
+        var enginecylinders = row.find('.enginecylinders').val();
+        var drivetype = row.find('.drivetype').val();
+        var fueltypeprimary = row.find('.fueltypeprimary').val();
+        var state = row.find('.state').val();
+        var region = row.find('.region').val();
+        var condition = row.find('.condition').val();
+        var paint_color = row.find('.paintcolor').val();
+        var days_since = row.find('.dayssince').val();
+        var odometer = row.find('.odometer').val();
 
     // Validation
-    if (!make || !model || !model_year || !series || !trim || !enginecylinders || !displ || !drivetype || !fueltypeprimary || !state || !region || !condition || !paint_color || !days_since || !odometer) {
-        alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.");
+    if (
+        !make || make === 'Select' ||
+        !model || model === 'Select' ||
+        !modelyear || modelyear === 'Select' ||
+        !series || series === 'Select' ||
+        !trim || trim === 'Select' ||
+        !enginecylinders || enginecylinders === 'Select' ||
+        !displ || displ === 'Select' ||
+        !drivetype || drivetype === 'Select' ||
+        !fueltypeprimary || fueltypeprimary === 'Select' ||
+        !state || state === 'Select' ||
+        !region || region === 'Select' ||
+        !condition || condition === 'Select' ||
+        !paint_color || paint_color === 'Select' ||
+        !days_since || days_since === 'Select' ||
+        !odometer || odometer === 'Select'
+    ) {
+    alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.");
         return;
     }
 
     // Validate if days_since and odometer are integers
-    if (isNaN(days_since) || isNaN(odometer) || days_since <= 0 || odometer <= 0) {
+    if (isNaN(days_since) || isNaN(odometer) || days_since < 0 || odometer < 0) {
         alert("Please enter valid integers for 'Days Since' and 'Odometer'.");
         return;
     }
@@ -417,13 +525,13 @@ function addRow(options, selectedValues = {}) {
     var data = {
         make: make,
         model: model,
-        model_year: model_year,
+        modelyear: modelyear,
         series: series,
         trim: trim,
         displacementcc: displ,
         enginecylinders: enginecylinders,
         drivetype: drivetype,
-        fueltype_primary: fueltypeprimary,
+        fueltypeprimary: fueltypeprimary,
         state: state,
         region: region,
         condition: condition,
@@ -431,7 +539,7 @@ function addRow(options, selectedValues = {}) {
         days_since: days_since,
         odometer: odometer
     };
-
+    console.log("Data for prediction:", data);
     // AJAX call to Flask route for prediction
     $.ajax({
             url: '/predict_price',
@@ -445,8 +553,108 @@ function addRow(options, selectedValues = {}) {
             },
             error: function () {
                 alert('Error predicting price. Please try again.');
-            }
+                
+            },
+            complete: function () {
+            // Re-enable both buttons after the request is completed
+            $('.predict, .compare').prop('disabled', false);
+        }
+            
         });
+});
+// New compare button AJAX request
+$('#vehicleTable').on('click', '.compare', function () {
+    var row = $(this).closest('tr');
+    $('.predict, .compare').prop('disabled', true);
+    // Get selected values from dropdowns and input fields (same as before)
+    var make = row.find('.make').val();
+    var model = row.find('.model').val();
+    var modelyear = row.find('.modelyear').val();
+    var series = row.find('.series').val();
+    var trim = row.find('.trim').val();
+    var displ = row.find('.displacementcc').val();
+    var enginecylinders = row.find('.enginecylinders').val();
+    var drivetype = row.find('.drivetype').val();
+    var fueltypeprimary = row.find('.fueltypeprimary').val();
+    var state = row.find('.state').val();
+    var region = row.find('.region').val();
+    var condition = row.find('.condition').val();
+    var paint_color = row.find('.paintcolor').val();
+    var days_since = row.find('.dayssince').val();
+    var odometer = row.find('.odometer').val();
+
+    // Validation (same as before)
+    if (
+        !make || make === 'Select' ||
+        !model || model === 'Select' ||
+        !modelyear || modelyear === 'Select' ||
+        !series || series === 'Select' ||
+        !trim || trim === 'Select' ||
+        !enginecylinders || enginecylinders === 'Select' ||
+        !displ || displ === 'Select' ||
+        !drivetype || drivetype === 'Select' ||
+        !fueltypeprimary || fueltypeprimary === 'Select' ||
+        !state || state === 'Select' ||
+        !region || region === 'Select' ||
+        !condition || condition === 'Select' ||
+        !paint_color || paint_color === 'Select' ||
+        !days_since || days_since === 'Select' ||
+        !odometer || odometer === 'Select'
+    ) {
+        alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.");
+        return;
+    }
+
+    // Validate if days_since and odometer are integers
+    if (isNaN(days_since) || isNaN(odometer) || days_since < 0 || odometer < 0) {
+        alert("Please enter valid integers for 'Days Since' and 'Odometer'.");
+        return;
+    }
+
+    // Prepare data to send to the Flask route for comparison
+    var data2 = {
+        make: make,
+        model: model,
+        modelyear: modelyear,
+        series: series,
+        trim: trim,
+        displacementcc: displ,
+        enginecylinders: enginecylinders,
+        drivetype: drivetype,
+        fueltypeprimary: fueltypeprimary,
+        state: state,
+        region: region,
+        condition: condition,
+        paint_color: paint_color,
+        days_since: days_since,
+        odometer: odometer
+    };
+    console.log("Data for prediction:", data2);
+    // AJAX request to /predict_price with make_pred set to false for comparison
+    $.ajax({
+        url: '/compare_price',
+        method: 'POST',
+        data: data2,
+        success: function(response) {
+            // Handle success response
+            console.log('Comparison successful:', response);
+            // Insert plot or table into the page
+            if (response.plot_img) {
+                const plotImage = `<img src="data:image/png;base64,${response.plot_img}" alt="Generated Plot" />`;
+                document.getElementById('dynamicResults').innerHTML = plotImage;
+            }
+            if (response.html_table) {
+                document.getElementById('dynamicResults').innerHTML += response.html_table;
+            }
+        },
+        error: function() {
+            alert('Error during comparison. Please try again.');
+        },
+        complete: function () {
+            // Re-enable both buttons after the request is completed
+            $('.predict, .compare').prop('disabled', false);
+        }
+    });
 });
 }
 
@@ -467,7 +675,7 @@ function fetchModels(make, row) {
         dataType: 'json',
         success: function (data) {
             // Add the default option before generating the rest
-            const defaultOption = ['Select a Model'];
+            const defaultOption = ['Select'];
             const models = generateOptions(defaultOption.concat(data.models));
             row.find('.model').html(models);
         },
@@ -499,9 +707,9 @@ function fetchModelYear(make, model, row) {
         dataType: 'json',
         success: function (data) {
             if (data.modelyear) {
-                data.modelyear.sort((a, b) => a - b); // Sort model years numerically
+                data.modelyear.sort((a, b) => b - a); // Sort model years numerically
                 const modelYearSelect = row.find('.modelyear');
-                populateAndLockIfSingleOption(modelYearSelect, ['Select a Model Year'].concat(data.modelyear));
+                populateAndLockIfSingleOption(modelYearSelect, ['Select'].concat(data.modelyear));
                 modelYearSelect.change(); // Trigger the next fetch if needed
             } else {
                 console.error('Model year data is missing');
@@ -529,12 +737,17 @@ function fetchModelExtras(make, model, modelyear, row) {
                 const engineCylindersSelect = row.find('.enginecylinders');
                 const fuelTypePrimarySelect = row.find('.fueltypeprimary');
                 const displacementSelect = row.find('.displacementcc');
-                populateAndLockIfSingleOption(displacementSelect, ['Select a displacement'].concat(data.displacementcc));
-                populateAndLockIfSingleOption(seriesSelect, ['Select a Series'].concat(data.series));
-                populateAndLockIfSingleOption(trimSelect, ['Select a Trim'].concat(data.trim));
-                populateAndLockIfSingleOption(driveTypeSelect, ['Select a Drive Type'].concat(data.drivetype));
-                populateAndLockIfSingleOption(engineCylindersSelect, ['Select Engine Cylinders'].concat(data.enginecylinders));
-                populateAndLockIfSingleOption(fuelTypePrimarySelect, ['Select a Fuel Type'].concat(data.fueltypeprimary));
+                populateAndLockIfSingleOption(displacementSelect, ['Select'].concat(data.displacementcc));
+                populateAndLockIfSingleOption(seriesSelect, ['Select'].concat(data.series));
+                populateAndLockIfSingleOption(trimSelect, ['Select'].concat(data.trim));
+                populateAndLockIfSingleOption(driveTypeSelect, ['Select'].concat(data.drivetype));
+                populateAndLockIfSingleOption(engineCylindersSelect, ['Select'].concat(data.enginecylinders));
+                populateAndLockIfSingleOption(fuelTypePrimarySelect, ['Select'].concat(data.fueltypeprimary));
+                seriesSelect.change();
+                trimSelect.change();
+                driveTypeSelect.change();
+                fuelTypePrimarySelect.change();
+                displacementSelect.change();
             } else {
                 console.error('Model extras data is missing');
             }
@@ -552,7 +765,7 @@ function fetchRegions(state, row) {
         data: JSON.stringify({ state }),
         dataType: 'json',
         success: function (data) {
-            const defaultOption = ['Select a Region'];
+            const defaultOption = ['Select'];
             row.find('.region').html(generateOptions(defaultOption.concat(data)));
         },
         error: function (xhr, status, error) {
@@ -699,6 +912,19 @@ function fetchRegions(state, row) {
                 });
             });
 
+            
+
+
+document.querySelector('.subheading').addEventListener('click', clearDynamicContent);
+
+    function clearDynamicContent(event) {
+        // Prevent any default link behavior if the target is a link (optional)
+        event.preventDefault();
+
+        // Clear content of the dynamic result divs
+        document.getElementById('dynamicResults').innerHTML = '';
+        document.getElementById('dynamicResults2').innerHTML = '';
+}
         </script>
         
 </body>

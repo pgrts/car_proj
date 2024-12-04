@@ -1,19 +1,16 @@
 FROM python:3.9-slim
 
-# Copy the app and data folder into the container
-COPY . /app
-
-# Make sure the data directory is included
+# Set the working directory to /app inside the container
 WORKDIR /app
 
-# Install dependencies
+# Copy the current directory contents into the container (excluding the ones in .dockerignore)
+COPY . /app
+
+# Install dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create the directory for the SQLite database
-RUN mkdir -p /app/data
-
-# Expose the port that Gunicorn will run on
+# Expose the port that the application will run on
 EXPOSE 8000
 
-# Run Gunicorn
+# Command to run the Flask app using Gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
