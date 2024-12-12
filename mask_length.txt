@@ -1,0 +1,80 @@
+    while mask_length > 1:
+
+        if displacementcc == 'None':
+            mask = mask[mask["displacementcc"].isnull()]
+        else:
+            mask = mask[mask["displacementcc"] == float(displacementcc)]
+        print(f"Rows after filtering by displacementcc: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length == 1:
+            break
+        if mask_length == 0:
+            
+            set_cols['displacementcc'] = float(displacementcc)
+
+        mask = mask[mask["enginecylinders"].astype(str) == enginecylinders.strip()]
+        print(f"Rows after filtering by enginecylinders: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length == 1:
+            break
+        elif mask_length == 0:
+            set_cols['enginecylinders'] = enginecylinders.strip()
+
+        mask = mask[mask["make"] == make]
+        print(f"Rows after filtering by make: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length < 2:
+            break
+
+
+        mask = mask[mask["model"] == model]
+        print(f"Rows after filtering by model: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length < 2:
+            break
+
+
+        mask = mask[mask["modelyear"] == float(modelyear)]
+        print(f"Rows after filtering by modelyear: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length < 2:
+            break
+
+
+        mask = mask[mask["series"] == series]
+        print(f"Rows after filtering by series: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length < 2:
+            break
+
+
+        mask = mask[mask["trim"] == trim]
+        print(f"Rows after filtering by trim: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length < 2:
+            break
+        
+
+        mask = mask[mask["drivetype"] == drivetype]
+        print(f"Rows after filtering by drivetype: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length < 2:
+            break
+
+
+        if fueltypeprimary == None:
+            print('Fuel Type None')
+        else:
+            mask = mask[mask["fueltypeprimary"] == fueltypeprimary]
+        print(f"Rows after filtering by fueltypeprimary: {len(mask)}")
+        mask_length = len(mask)
+        if mask_length < 2:
+            break
+
+
+        if mask_length > 1:
+            mask = mask.head(1)
+            break
+        if mask_length == 0:
+            print('error with masking')
+            return

@@ -1,6 +1,7 @@
-<!-- State Filter for Table 1 -->
+
 <div class="filter-container">
-    <label for="stateFilter1">Filter by State (Table 1):</label>
+    <h1>Recent Listings</h1>
+    <label for="stateFilter1">Choose State</label>
     <select id="stateFilter1">
         <option value="">All States</option>
         <!-- Dynamically adding states -->
@@ -18,14 +19,16 @@
                 tx: "Texas", ut: "Utah", va: "Virginia", vt: "Vermont", wa: "Washington", 
                 wi: "Wisconsin", wv: "West Virginia", wy: "Wyoming"
             };
-
             const stateSelect1 = document.getElementById('stateFilter1');
-            for (const [abbr, name] of Object.entries(states)) {
-                stateSelect1.innerHTML += `<option value="${abbr}">${name}</option>`;
-            }
+                for (const [abbr, name] of Object.entries(states)) {
+                    const option = document.createElement("option");
+                    option.value = abbr;
+                    option.text = name;
+                    stateSelect1.appendChild(option);
+                }
         </script>
     </select>
-</div>
+</div>   
 
 <!-- Table 1 (Listings) -->
 <div style="overflow-x: auto; overflow-y: auto; max-height: 90vh;">
@@ -55,18 +58,22 @@
 
 <!-- State Filter for Table 2 -->
 <div class="filter-container">
-    <label for="stateFilter2">Filter by State (Table 2):</label>
+    <h1>Recent Price Drops</h1>
+    <label for="stateFilter2">Choose State</label>
     <select id="stateFilter2">
         <option value="">All States</option>
         <!-- Dynamically adding states -->
         <script>
             const stateSelect2 = document.getElementById('stateFilter2');
-            for (const [abbr, name] of Object.entries(states)) {
-                stateSelect2.innerHTML += `<option value="${abbr}">${name}</option>`;
-            }
+                for (const [abbr, name] of Object.entries(states)) {
+                    const option = document.createElement("option");
+                    option.value = abbr;
+                    option.text = name;
+                    stateSelect2.appendChild(option);
+                }
         </script>
     </select>
-</div>
+</div>  
 
 <!-- Table 2 (Price Changes) -->
 <div style="overflow-x: auto; overflow-y: auto; max-height: 90vh;">
@@ -74,16 +81,17 @@
         <thead>
             <tr>
                 <th>Link</th>
-                <th>Old Posting Date</th>
-                <th>New Posting Date</th>
+                <th>Old Date</th>
+                <th>New Date</th>
                 <th>State</th>
-                <th>Odometer</th>
                 <th>Model Year</th>
                 <th>Make</th>
                 <th>Model</th>
                 <th>Old Price</th>
                 <th>New Price</th>
-                <th>Price Drop</th>
+                <th>Price Change</th>
+                <th>Old Odometer</th>
+                <th>New Odometer</th>
                 <th>Body Class</th>
                 <th>Engine Cylinders</th>
                 <th>Drive Type</th>
@@ -94,7 +102,16 @@
     </table>
 </div>
 
+<style>
+    /* Highlight cells on hover */
+    .highlight-on-hover {
+        background-color: #e3e3e3;
+        cursor: pointer;
+    }
+</style>
+
 <script>
+
     $(document).ready(function () {
         // Initialize DataTables for Table 1
         const table1 = $('#dynamicTable1').DataTable({
@@ -110,7 +127,13 @@
             },
             columns: [
                 { data: 'link', render: data => `<a href="${data}" target="_blank">View Listing</a>` },
-                { data: 'posting_date' },
+                {
+                    data: 'posting_date',
+                        render: data => {
+                            var formattedDate = moment(data).isValid() ? moment(data).format('D MMM YYYY') : 'Invalid Date'; // Check validity
+                            return formattedDate;
+                    }
+                 },
                 { data: 'state' },
                 { data: 'odometer' },
                 { data: 'modelyear' },
@@ -125,21 +148,39 @@
                 { data: 'drivetype' },
                 { data: 'series' },
                 { data: 'trim' }
-            ]
+            ],
+    columnDefs: [
+                {
+                    targets: [1], // Target the 'old_date_scraped' and 'new_date_scraped' columns
+                    type: 'date',
+                    render: function (data, type, row) {
+                        // Handle sorting and formatting
+                        if (type === 'display' || type === 'filter') {
+                            // Format date for display
+                            var formattedDate = moment(data).isValid() ? moment(data).format('D MMM YYYY') : 'Invalid Date';
+                            return formattedDate;
+                        }
+                        // Return original date for sorting purposes
+                        return data;
+                    }
+                }
+            ],
+            order: [[1, 'desc']] // Default order by 'New Date' descending
         });
 
-        // Hover effect for Table 1 rows
-        $('#dynamicTable1 tbody').on('mouseenter', 'tr', function () {
-            $(this).css('background-color', '#f1f1f1');  // Change background color on hover
-        }).on('mouseleave', 'tr', function () {
-            $(this).css('background-color', '');  // Revert background color on mouse leave
-        });
+        // Apply gradient to "Price Below Value %" column in Table 1
+        function applyGradientTable1() {
+            $('#dynamicTable1 tbody tr').each(function () {
+                const cell = $(this).find('td:nth-child(11)'); // Price Below Value % column (11th)
+                const priceBelowValuePercent = parseFloat(cell.text().replace(/[^\d.-]/g, ''));
 
-        // Click event for Table 1 rows
-        $('#dynamicTable1 tbody').on('click', 'tr', function () {
-            const rowData = table1.row(this).data();
-            alert('You clicked on row with data: ' + JSON.stringify(rowData));  // Show row data (you can replace this with any action)
-        });
+                if (!isNaN(priceBelowValuePercent)) {
+                    const red = priceBelowValuePercent < 0 ? Math.min(255, Math.abs(priceBelowValuePercent) * 5) : 0;
+                    const green = priceBelowValuePercent > 0 ? Math.min(255, Math.abs(priceBelowValuePercent) * 5) : 0;
+                    $(this).css('background-color', `rgba(${red}, ${green}, 0, 0.2)`); // Apply color gradient
+                }
+            });
+        }
 
         // Initialize DataTables for Table 2 (Price Changes)
         const table2 = $('#dynamicTable2').DataTable({
@@ -154,57 +195,99 @@
                 }
             },
             columns: [
-                { data: 'link', render: data => `<a href="${data}" target="_blank">View Listing</a>` },
-                { data: 'old_posting_date' },
-                { data: 'new_posting_date' },
-                { data: 'state' },
-                { data: 'odometer' },
-                { data: 'modelyear' },
-                { data: 'make' },
-                { data: 'model' },
-                { data: 'old_price', render: data => `$${parseFloat(data).toLocaleString()}` },
-                { data: 'new_price', render: data => `$${parseFloat(data).toLocaleString()}` },
-                { data: 'price_drop', render: data => `$${parseFloat(data).toLocaleString()}` },
-                { data: 'bodyclass' },
-                { data: 'enginecylinders' },
-                { data: 'drivetype' },
-                { data: 'series' },
-                { data: 'trim' }
-            ]
-        });
-
-        // Hover effect for Table 2 rows
-        $('#dynamicTable2 tbody').on('mouseenter', 'tr', function () {
-            $(this).css('background-color', '#f1f1f1');  // Change background color on hover
-        }).on('mouseleave', 'tr', function () {
-            $(this).css('background-color', '');  // Revert background color on mouse leave
-        });
-
-        // Click event for Table 2 rows
-        $('#dynamicTable2 tbody').on('click', 'tr', function () {
-            const rowData = table2.row(this).data();
-            alert('You clicked on row with data: ' + JSON.stringify(rowData));  // Show row data (you can replace this with any action)
-        });
-
-        // Apply gradient to "Price Below Value %" column in Table 1
-        function applyGradientTable1() {
-            $('#dynamicTable1 tbody tr').each(function () {
-                const priceChange = parseFloat($(this).find('td:eq(9)').text().replace('$', '').replace(',', ''));
-                const red = priceChange < 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
-                const green = priceChange >= 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
-                $(this).css('background-color', `rgba(${red}, ${green}, 0, 0.2)`); // Apply color gradient
-            });
+        { data: 'new_link', render: data => `<a href="${data}" target="_blank">View Listing</a>` },
+        {
+            data: 'old_date_scraped',
+            render: data => {
+                var formattedDate = moment(data).isValid() ? moment(data).format('D MMM YYYY') : 'Invalid Date'; // Check validity
+                return formattedDate;
+            }
+        },
+        {
+            data: 'new_date_scraped',
+            render: data => {
+                var formattedDate = moment(data).isValid() ? moment(data).format('D MMM YYYY') : 'Invalid Date'; // Check validity
+                return formattedDate;
+            }
+        },
+        { data: 'state' },
+        { data: 'modelyear' },
+        { data: 'make' },
+        { data: 'model' },
+        { data: 'old_price', render: data => `$${parseFloat(data).toLocaleString()}` },
+        { data: 'new_price', render: data => `$${parseFloat(data).toLocaleString()}` },
+        { data: 'price_drop', render: data => `$${parseFloat(data).toLocaleString()}`, title: 'Price Drop' },
+        { data: 'old_odometer' },
+        { data: 'new_odometer' },
+        { data: 'bodyclass' },
+        { data: 'enginecylinders' },
+        { data: 'drivetype' },
+        { data: 'series' },
+        { data: 'trim' }
+        ],
+    columnDefs: [
+        {
+            targets: [1, 2], // Target the 'old_date_scraped' and 'new_date_scraped' columns
+            type: 'date',
+            render: function (data, type, row) {
+                // Handle sorting and formatting
+                if (type === 'display' || type === 'filter') {
+                    // Format date for display
+                    var formattedDate = moment(data).isValid() ? moment(data).format('D MMM YYYY') : 'Invalid Date';
+                    return formattedDate;
+                }
+                // Return original date for sorting purposes
+                return data;
+            }
         }
+    ],
+    order: [[2, 'desc']] // Default order by 'New Date' descending
+});
 
         // Apply gradient to "Price Change" column in Table 2
         function applyGradientTable2() {
             $('#dynamicTable2 tbody tr').each(function () {
-                const priceChange = parseFloat($(this).find('td:eq(10)').text().replace('$', '').replace(',', ''));
-                const red = priceChange < 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
-                const green = priceChange >= 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
-                $(this).css('background-color', `rgba(${red}, ${green}, 0, 0.2)`); // Apply color gradient
+                const cell = $(this).find('td:nth-child(10)'); // Price Change column (10th)
+                const priceChange = parseFloat(cell.text().replace(/[^\d.-]/g, ''));
+
+                if (!isNaN(priceChange)) {
+                    const red = priceChange < 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
+                    const green = priceChange > 0 ? Math.min(255, Math.abs(priceChange) * 5) : 0;
+                    $(this).css('background-color', `rgba(${red}, ${green}, 0, 0.2)`); // Apply color gradient
+                }
             });
         }
+
+        // Hover effect for highlighting cells (for both tables)
+        $('#dynamicTable1 tbody').on('mouseenter', 'td', function () {
+            $(this).addClass('highlight-on-hover');
+        }).on('mouseleave', 'td', function () {
+            $(this).removeClass('highlight-on-hover');
+        });
+
+        $('#dynamicTable2 tbody').on('mouseenter', 'td', function () {
+            $(this).addClass('highlight-on-hover');
+        }).on('mouseleave', 'td', function () {
+            $(this).removeClass('highlight-on-hover');
+        });
+
+    // Click event to populate search input based on clicked cell value, ignoring the first column
+    $('#dynamicTable1 tbody').on('click', 'td', function () {
+        const cellIndex = $(this).index(); // Get the index of the clicked cell
+        if (cellIndex === 0) return; // Ignore clicks on the first column (0th child)
+        
+        const searchTerm = $(this).text(); // Use clicked cell's text
+        $('#dynamicTable1_filter input').val(searchTerm).trigger('keyup');
+    });
+
+    $('#dynamicTable2 tbody').on('click', 'td', function () {
+        const cellIndex = $(this).index(); // Get the index of the clicked cell
+        if (cellIndex === 0) return; // Ignore clicks on the first column (0th child)
+        
+        const searchTerm = $(this).text(); // Use clicked cell's text
+        $('#dynamicTable2_filter input').val(searchTerm).trigger('keyup');
+    });
+
 
         // Event listeners for state filters
         $('#stateFilter1').change(function () {
@@ -216,5 +299,9 @@
             table2.ajax.reload();
             applyGradientTable2();
         });
+        
+        // Initialize the gradient for Table 1 and Table 2 after data is loaded
+        table1.on('draw', applyGradientTable1);
+        table2.on('draw', applyGradientTable2);
     });
 </script>

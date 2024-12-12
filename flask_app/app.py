@@ -1,13 +1,7 @@
 from flask import Flask, request, render_template, jsonify, g
 import pandas as pd
 import numpy as np
-
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from catboost import CatBoostRegressor
-import io
-import base64
 import requests
 import random
 from sqlalchemy import create_engine
@@ -150,19 +144,34 @@ base_dir = os.getcwd()
 
 # Load the CatBoost model from 'cbm' directory
 model_path = os.path.join(base_dir, 'cbm', 'cb_model_2024_11_25.cbm')
+'''
+bucket_name = 'car_db'  # The GCS bucket name where your SQLite DB is stored
+blob_name = 'car_db.db'  # The name of the SQLite DB file in the bucket
+local_db_path = '/tmp/car_db.db'  # Temporary path to save the SQLite DB file locally
 
+# Initialize GCS client
+client = storage.Client()
+
+# Download the blob from GCS to the local path
+bucket = client.get_bucket(bucket_name)
+blob = bucket.blob(blob_name)
+blob.download_to_filename(local_db_path)
+'''
 # Load the SQLite database from 'data' directory
 db_path = os.path.join(base_dir, 'data', 'car_db.db')
 
 # Check if paths exist (for debugging)
 print(f"Model Path: {model_path} Exists: {os.path.exists(model_path)}")
-print(f"DB Path: {db_path} Exists: {os.path.exists(db_path)}")
 
-try:
-    seql_engine = create_engine(f'sqlite:///{db_path}')
-    print('seql_engine connected successfully')
-except Exception as e:
-    print(f"Error initializing database connection: {e}")
+
+if os.path.exists(db_path):
+    try:
+        print(f"DB Path: {db_path} Exists: {os.path.exists(db_path)}")
+        print(f"DB Size: {os.path.getsize(db_path)} bytes")
+        seql_engine = create_engine(f'sqlite:///{db_path}')
+        print('seql_engine connected successfully')
+    except Exception as e:
+        print(f"Error initializing database connection: {e}")
 
 #df_vehicles = model_prep(pd.read_sql(f'{unique_vehicles}', seql_engine)).replace({'None':'nan'})
 df_vehicles = None
@@ -456,7 +465,14 @@ def predict_price():
         mask[col] = val
 
     print("Final row with new values:")
-    print(mask)        
+    print(mask[['state', 'state_income', 'region','condition','paint_color', 'days_since']])       
+    print(mask[['modelyear', 'series', 'trim', 'fueltypeprimary','drivetype','enginecylinders', 'displacementcc', 'odometer']])    
+
+    '''
+    for col in cats+nums:
+        print(col)
+        print(mask[col])
+    '''
     pred = cb72.predict(mask[cats+nums])[0].round().astype(int)
 
     # Return the prediction
@@ -468,22 +484,23 @@ def predict_price():
 def compare_price():
     global df_vehicles
     global state_income_map
+    data = request.get_json()  # Parse the JSON data sent by the frontend
 
-    make = request.form.get('make')
-    model = request.form.get('model')
-    modelyear = request.form.get('modelyear')
-    series = request.form.get('series')
-    trim = request.form.get('trim')
-    displacementcc = request.form.get('displacementcc')
-    enginecylinders = request.form.get('enginecylinders')
-    drivetype = request.form.get('drivetype')
-    fueltypeprimary = request.form.get('fueltypeprimary')
-    state = request.form.get('state')
-    region = request.form.get('region')
-    condition = request.form.get('condition')
-    paint_color = request.form.get('paint_color')
-    days_since = int(request.form.get('days_since', days_since_reference))  
-    odometer = int(request.form.get('odometer', 100000)) 
+    make = data.get('make', None)
+    model = data.get('model', None)
+    modelyear = data.get('modelyear', None)
+    series = data.get('series', None)
+    trim = data.get('trim', None)
+    displacementcc = data.get('displacementcc', None)
+    enginecylinders = data.get('enginecylinders', None)
+    drivetype = data.get('drivetype', None)
+    fueltypeprimary = data.get('fueltypeprimary', None)
+    state = data.get('state', None)
+    region = data.get('region', None)
+    condition = data.get('condition', None)
+    paint_color = data.get('paint_color', None)
+    days_since = int(data.get('days_since', days_since_reference))  # Default to 1414 if not provided
+    odometer = int(data.get('odometer', 100000))  # Default to 100000 if not provided
     
     print(f'days_since : {days_since}')
     print(f"make: {make}, type: {type(make)}")
@@ -558,40 +575,45 @@ def compare_price():
     features = mask[cats+nums]
     similar_vehicles = find_similar_vehicles(features, df_vehicles)
 
-    print('sim veh:')
-    print(similar_vehicles)
 
     if similar_vehicles.empty:
         print('NO SIM')
         return 
 
-    if len(mask) == 1:
-        mask['state_income'] = state_income
-        similar_vehicles['state_income'] = state_income
+    if len(mask) > 1:
+        mask = mask.head(1)
 
-        
-        mask["state"] = state
-        similar_vehicles["state"] = state
+    mask['state_income'] = state_income
+    similar_vehicles['state_income'] = state_income
 
-        mask["region"] = region
-        similar_vehicles["region"] = region
+    
+    mask["state"] = state
+    similar_vehicles["state"] = state
 
-        mask["condition"] = condition
-        similar_vehicles["condition"] = condition
+    mask["region"] = region
+    similar_vehicles["region"] = region
 
-        mask["paint_color"] = paint_color
-        similar_vehicles["paint_color"] = paint_color
+    mask["condition"] = condition
+    similar_vehicles["condition"] = condition
 
-        mask["days_since"] = days_since
-        similar_vehicles["days_since"] = days_since
+    mask["paint_color"] = paint_color
+    similar_vehicles["paint_color"] = paint_color
 
+    mask["days_since"] = days_since
+    similar_vehicles["days_since"] = days_since
+    '''
+    for col in cats+nums:
+        print(col)
+        print(mask[col])
+    '''
+    print("Final row with new values:")
+    print(mask[['state', 'state_income', 'region','condition','paint_color', 'days_since']])
+    print(mask[['modelyear', 'series', 'trim', 'fueltypeprimary','drivetype','enginecylinders', 'displacementcc', 'odometer']])  
 
-        print("Final row with new values:")
-        print(mask)
-
-        print("sim veh with new values:")
-        print(similar_vehicles)
-
+    print("sim veh with new values:")
+    print(similar_vehicles[['state', 'state_income', 'region','condition','paint_color', 'days_since']])
+    print(similar_vehicles[['modelyear', 'series', 'trim', 'fueltypeprimary','drivetype','enginecylinders', 'displacementcc', 'odometer']])  
+    '''
     df = pd.concat([similar_vehicles, features])
     df['predicted_price'] = cb72.predict(model_prep(df[cats+nums])).round().astype(int)
 
@@ -601,120 +623,9 @@ def compare_price():
     odometer_options = list(range(0, 500001, 25000))
     state_options = df_vehicles['state'].dropna().unique().tolist()
     condition_options = ['excellent', 'like new', 'good', np.nan, 'fair', 'new', 'salvage']
-
-    plot_img, _ = plot_comparison(features, similar_vehicles)
-
-    # Generate dropdowns and table HTML
-    table_rows = []
-    for i, row in df.iterrows():
-        row_html = f"""
-        <tr>
-            <td>
-                <button type="button" class="clone-button" data-row-index="{i}">Clone</button>
-            </td>
-            <td>
-                <select name="odometer" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{value}" {"selected" if value == odometer else ""}>{value}</option>'
-                        for value in odometer_options
-                    )}
-                </select>
-            </td>
-            <td>{row['make']}</td>
-            <td>{row['model']}</td>
-            <td>{row['modelyear']}</td>
-            <td>{row['series']}</td>
-            <td>{row['trim']}</td>
-            <td>{row['enginecylinders']}</td>
-            <td>{row['drivetype']}</td>
-            <td>
-                <select name="paint_color" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{color}" {"selected" if color == paint_color else ""}>{color}</option>'
-                        for color in paint_color_options
-                    )}
-                </select>
-            </td>
-            <td>
-                <select name="state" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{state}" {"selected" if state == state else ""}>{state}</option>'
-                        for state in state_options
-                    )}
-                </select>
-            </td>
-            <td>
-                <select name="condition" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{condition}" {"selected" if condition == condition else ""}>{condition}</option>'
-                        for condition in condition_options
-                    )}
-                </select>
-            </td>            
-            <td>
-                <span class="predicted-price" data-row-index="{i}">{row['predicted_price']}</span>
-            </td>
-            <td>
-                <button type="button" class="update-prediction" id="update-prediction" data-row-index="{i}">Update</button>
-            </td>
-        </tr>
-        """
-        table_rows.append(row_html)
-
-    table_body_html = "\n".join(table_rows)
-
-    styled_table_html = f"""
-    <style>
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #f4f4f4;
-            font-weight: bold;
-        }}
-        tr:nth-child(even) {{
-            background-color: #f9f9f9;
-        }}
-        tr:hover {{
-            background-color: #f1f1f1;
-        }}
-        select {{
-            width: 100%;
-        }}
-    </style>
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Action</th>
-                <th>Odometer</th>
-                <th>Make</th>
-                <th>Model</th>
-                <th>Year</th>
-                <th>Series</th>
-                <th>Trim</th>
-                <th>Engine Cylinders</th>
-                <th>DriveType</th>
-                <th>Paint Color</th>
-                <th>State</th>
-                <th>Condition</th>
-                <th>Predicted Price</th>
-                <th>Update</th>
-            </tr>
-        </thead>
-        <tbody>
-            {table_body_html}
-        </tbody>
-    </table>
-    """
-
-    return jsonify({'plot_img': plot_img, 'html_table': styled_table_html})
+    '''
+    
+    return plot_comparison(mask, similar_vehicles)
 
 def get_json(url):
     try:
@@ -868,9 +779,15 @@ def find_similar_vehicles_no_threshold(df1, df2, n_veh, max_threshold=5):
 
 def create_odo_preds(row, odo_values, model=cb72, cats=cats, nums=nums):
     preds = []
+    print('odo_preds')
+    print(row[['make','model','modelyear','displacementcc', 'state', 'condition', 'paint_color']])
+
     for odo in odo_values:
+        print(odo)
         row['odometer'] = odo
-        preds.append(model.predict(row[cats+nums]).round().astype(int))
+        pred = model.predict(row[cats+nums]).round().astype(int)
+        print(pred)
+        preds.append(pred)
         
     return preds
 
@@ -907,7 +824,21 @@ def generate_random_color():
         if not (color[0] > 0.8 and color[1] < 0.2 and color[2] < 0.2):  # Adjust this threshold as necessary
             return color
         
-def plot_comparison(row, df, model=cb72, cats=cats, nums=nums, odo_values=np.arange(50000, 300001, 10000)):
+color_dict = {
+    0: 'rgb(255, 0, 0)',      # Red
+    1: 'rgb(0, 255, 0)',      # Green
+    2: 'rgb(0, 0, 255)',      # Blue
+    3: 'rgb(255, 165, 0)',    # Orange
+    4: 'rgb(75, 0, 130)',     # Indigo
+    5: 'rgb(255, 255, 0)',    # Yellow
+    6: 'rgb(128, 0, 128)',    # Purple
+    7: 'rgb(255, 105, 180)',  # Hot Pink
+    8: 'rgb(0, 255, 255)',    # Cyan
+    9: 'rgb(192, 192, 192)',  # Silver
+}
+
+def plot_comparison(row, df, model=cb72, cats=cats, nums=nums, odo_values=np.arange(0, 300001, 25000)):
+    print('PLOT COMP!!!')
     # Prepare the row
     if isinstance(row, pd.DataFrame):
         df1 = model_prep(row).iloc[0]  # Ensure single row
@@ -916,78 +847,57 @@ def plot_comparison(row, df, model=cb72, cats=cats, nums=nums, odo_values=np.ara
     else:
         print('row is not series or dataframe')
         return None  # Return None if input is invalid
-
-    if isinstance(df, pd.DataFrame):
+    
+    # Create a list to hold the results
+    data = {'mileage': odo_values}
+    
+    # Generate predictions for the target vehicle (df1)
+    target_label = create_label(df1)
+    target_preds = create_odo_preds(df1, odo_values, model, cats, nums)
+    data[target_label] = target_preds
+    
+    if df.empty:
+        return 'NO VEH'
+    elif isinstance(df, pd.DataFrame):
         df = model_prep(df)
+        # Generate predictions for each similar vehicle
+        for _, sim_row in df.iterrows():
+            sim_label = create_label(sim_row)
+            sim_preds = create_odo_preds(sim_row, odo_values, model, cats, nums)
+            data[sim_label] = sim_preds
     else:
         print('df is not dataframe')
         return None  # Return None if input is invalid
 
-    label = create_label(df1)
-    preds = create_odo_preds(df1, odo_values, model=model, cats=cats, nums=nums)
+    # Convert the results into a DataFrame
+    predictions_df = pd.DataFrame(data)
+    print(predictions_df)
+    chart_data = {
+        'labels': predictions_df['mileage'].tolist(),  # X-axis: mileage
+        'datasets': []
+    }
 
-    # Initialize a DataFrame to hold the results
-    results = pd.DataFrame({'odometer': odo_values})
-    results[label] = [format_price(x) for x in preds]  # Use the primary vehicle label as the column name and format prices
+    for i, label in enumerate(predictions_df.keys()):
+        if label == 'mileage':  # Skip the mileage column for the dataset
+            continue
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(odo_values, preds, label=label, color='red', linewidth=3)
-    # Plot primary vehicle predictions
-    used_colors = []  # To keep track of used colors
-    distinct_colors = ['green', 'orange', 'blue', 'pink', 'black', 'gray', 'purple', 'yellow', 'brown']
+        # Assign color from the color_dict, loop back to 0 if there are more than available colors
+        color_index = i if i < len(color_dict) else i % len(color_dict)
+        color = color_dict[color_index]
 
-    def generate_distinct_color():
-        """Generate a distinct color from the predefined list."""
-        while True:
-            # Randomly select a color
-            color = random.choice(distinct_colors)
-            # Ensure the color is not already used
-            if color not in used_colors:
-                return color
-            
-    for idx, sim_row in df.iterrows():
-        sim_label = create_label(sim_row)
-        sim_preds = create_odo_preds(sim_row, odo_values, model=model, cats=cats, nums=nums)
-
-        # Generate a new random color
-        color = generate_distinct_color()
-        used_colors.append(color)
-
-        plt.plot(odo_values, sim_preds, label=sim_label, color=color, linewidth=1)
-        
-        # Assign formatted predictions to the results DataFrame for each similar vehicle
-        results[sim_label] = [format_price(x) for x in sim_preds]  # Directly assign formatted prices for the similar vehicle
-
-        # Label predictions for similar vehicles every 50,000 miles
-        for odo in range(0, 300001, 50000):
-            if odo in odo_values:
-                sim_pred_value = sim_preds[np.where(odo_values == odo)[0][0]]  # Get the corresponding prediction
-                plt.text(odo, sim_pred_value, format_price(sim_pred_value), fontsize=10, color='black')
-
-    # Label predictions for the primary vehicle every 50,000 miles
-    for odo in range(0, 300001, 50000):
-        if odo in odo_values:
-            pred_value = preds[np.where(odo_values == odo)[0][0]]  # Get the corresponding prediction
-            plt.text(odo, pred_value, format_price(pred_value), fontsize=10, color='black')
-
-    # Add title and labels
-    plt.title(label + ' vs. Competition')
-    plt.xlabel('Miles')
-    plt.ylabel('Price')
-
-    # Show the legend
-    plt.legend()
-
-    results = results[results['odometer'].isin(np.arange(50000, 300001, 50000))]
-    results['odometer'] = results['odometer'].apply(lambda x: f"{int(x):,}")
-    print(results)
-    # Save plot to a string buffer
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    img_base64 = base64.b64encode(buffer.getvalue()).decode()
-
-    return img_base64, results
+        chart_data['datasets'].append({
+            'label': label,  # car labels like 'car1', 'car2', etc.
+            'data': predictions_df[label].tolist(),  # y-values: model predictions at different mileages
+            'fill': False,  # Set to True if you want a filled chart
+            'borderColor': color,  # Line color
+            'backgroundColor': f'rgba({color[4:-1]}, 0.2)',  # Background color (with transparency)
+            'tension': 0.1  # Line smoothness
+        })  
+    #html_table = "<table><tr><th>Make</th><th>Model</th><th>Price</th></tr><tr><td>Toyota</td><td>Camry</td><td>$15,000</td></tr></table>"
+    print(chart_data)
+    return jsonify({
+        "chart_data": chart_data
+    })
 
 @app.route('/')
 def index():
@@ -1043,7 +953,7 @@ def search_make_model_year():
 
         # Build the HTML form with table rows manually
         table_html = f'<h1>Select a Vehicle for {year} {make.capitalize()} {model.capitalize()}</h1>'
-        table_html += '<table id="vinTable">'
+        table_html += '<div class="table-container"><table id="vinTable" class="responsive-table">'
         table_html += '''
             <tr>
                 <th>Series</th>
@@ -1077,7 +987,7 @@ def search_make_model_year():
                 </tr>
             '''
 
-        table_html += '</table>'
+        table_html += '</table></div>'
 
         # Return the dynamically created table as a response
         return jsonify({'html': table_html})
@@ -1149,44 +1059,6 @@ def search_vin():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/update_prediction', methods=['POST'])
-def update_prediction():
-    try:
-        # Get the data sent from the frontend (row data)
-        row_data = request.get_json()
-
-        # Get the values sent from the row, including the necessary ones for prediction
-        odometer = row_data['odometer']
-        paint_color = row_data['paint_color']
-        state = row_data['state']
-        condition = row_data['condition']
-        index = row_data['index'] 
-
-        data_cols = [x for x in cats+nums if x not in ['odometer','paint_color','state','condition']]
-
-        vehicle_row = df_vehicles.loc[[index]]
-        
-        vehicle_row['odometer'] = odometer
-        vehicle_row['paint_color'] = paint_color
-        vehicle_row['state'] = state
-        vehicle_row['condition'] = condition
-        vehicle_row['state_income'] = 59802
-        vehicle_row['region'] = 'dallas / fort worth'
-        vehicle_row['days_since'] = 1400
-
-        try:
-        # Make the prediction using the model (cb72 in your case)
-            predicted_price = cb72.predict(model_prep(vehicle_row[cats+nums])).round().astype(int)[0]
-        except:
-            print('prediction failure')
-
-        # Return the new predicted price for this row
-        return jsonify({'success': True, 'predicted_price': int(predicted_price)})
-
-    except Exception as e:
-        print(f"Error during prediction update: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/create_plot', methods=['POST'])
 def create_plot(features, new_vin=False):
     global df_vehicles
@@ -1236,119 +1108,7 @@ def create_plot(features, new_vin=False):
     state_options = df_vehicles['state'].dropna().unique().tolist()
     condition_options = ['excellent', 'like new', 'good', np.nan, 'fair', 'new', 'salvage']
 
-    plot_img, _ = plot_comparison(features, similar_vehicles)
-
-    # Generate dropdowns and table HTML
-    table_rows = []
-    for i, row in df.iterrows():
-        row_html = f"""
-        <tr>
-            <td>
-                <button type="button" class="clone-button" data-row-index="{i}">Clone</button>
-            </td>
-            <td>
-                <select name="odometer" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{value}" {"selected" if value == default_odometer else ""}>{value}</option>'
-                        for value in odometer_options
-                    )}
-                </select>
-            </td>
-            <td>{row['make']}</td>
-            <td>{row['model']}</td>
-            <td>{row['modelyear']}</td>
-            <td>{row['series']}</td>
-            <td>{row['trim']}</td>
-            <td>{row['enginecylinders']}</td>
-            <td>{row['drivetype']}</td>
-            <td>
-                <select name="paint_color" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{color}" {"selected" if color == default_paint_color else ""}>{color}</option>'
-                        for color in paint_color_options
-                    )}
-                </select>
-            </td>
-            <td>
-                <select name="state" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{state}" {"selected" if state == default_state else ""}>{state}</option>'
-                        for state in state_options
-                    )}
-                </select>
-            </td>
-            <td>
-                <select name="condition" data-row-index="{i}">
-                    {"".join(
-                        f'<option value="{condition}" {"selected" if condition == default_condition else ""}>{condition}</option>'
-                        for condition in condition_options
-                    )}
-                </select>
-            </td>            
-            <td>
-                <span class="predicted-price" data-row-index="{i}">{row['predicted_price']}</span>
-            </td>
-            <td>
-                <button type="button" class="update-prediction" id="update-prediction" data-row-index="{i}">Update</button>
-            </td>
-        </tr>
-        """
-        table_rows.append(row_html)
-
-    table_body_html = "\n".join(table_rows)
-
-    styled_table_html = f"""
-    <style>
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #f4f4f4;
-            font-weight: bold;
-        }}
-        tr:nth-child(even) {{
-            background-color: #f9f9f9;
-        }}
-        tr:hover {{
-            background-color: #f1f1f1;
-        }}
-        select {{
-            width: 100%;
-        }}
-    </style>
-    <table class="results-table">
-        <thead>
-            <tr>
-                <th>Action</th>
-                <th>Odometer</th>
-                <th>Make</th>
-                <th>Model</th>
-                <th>Year</th>
-                <th>Series</th>
-                <th>Trim</th>
-                <th>Engine Cylinders</th>
-                <th>DriveType</th>
-                <th>Paint Color</th>
-                <th>State</th>
-                <th>Condition</th>
-                <th>Predicted Price</th>
-                <th>Update</th>
-            </tr>
-        </thead>
-        <tbody>
-            {table_body_html}
-        </tbody>
-    </table>
-    """
-
-    return jsonify({'plot_img': plot_img, 'html_table': styled_table_html})
+    return plot_comparison(features, similar_vehicles)
 
 @app.route('/api/price_changes', methods=['GET'])
 def price_changes():
@@ -1385,6 +1145,7 @@ def data():
     # Return as JSON for API clients
     return jsonify(g.table_data)
 
-
 if __name__ == '__main__':
-    app.run(port=3000, debug=True)
+    port = int(os.environ.get("PORT", 8080))  # Default to 8080 if PORT is not set
+    app.run(host="0.0.0.0", port=port, debug=True)  # Bind to 0.0.0.0 to allow external connections
+

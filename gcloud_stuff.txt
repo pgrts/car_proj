@@ -1,0 +1,83 @@
+docker tag pgrts119/craigs_cars:craig_v1 us-docker.pkg.dev/strategic-kite-441305-c8/craigcar:craig_flask
+docker push us-docker.pkg.dev/strategic-kite-441305-c8/craigcar:craig_flask
+
+
+
+gcloud auth configure-docker us-docker.pkg.dev
+
+
+gcloud projects get-iam-policy strategic-kite-441305-c8 --format="table(bindings.role,bindings.members)"
+
+
+gcloud artifacts repositories describe craigcar --location=us --project=strategic-kite-441305-c8
+
+
+host_path: [path to data folder]
+container_path: /app/data
+
+
+GKE:
+
+gcloud container clusters create clustercraig --zone us-central1-a --num-nodes 1
+
+gcloud compute disks create car-db-disk --size 1GB --zone us-central1-a
+
+
+kubectl delete -f "C:\Users\pgrts\Desktop\python\car_proj\kubes"
+k
+
+
+
+kubectl delete pod nginx-594b96f898-q54wf
+kubectl apply -f "C:\Users\pgrts\Desktop\python\car_proj\kubes\pv.yml"
+
+kubectl apply -f "C:\Users\pgrts\Desktop\python\car_proj\kubes\nginx-deployment.yml"
+
+IF DOCKER IMAGE NOT ON DOCKER HUB:
+	docker tag flask_app-web:latest pgrts119/flask_app-web:latest
+	docker push pgrts119/flask_app-web:latest
+	
+	
+DEBUG CLUSTER: 
+
+kubectl exec -it  xxxxxx   -- /bin/sh
+
+
+kubectl describe pod xxxxx
+kubectl logs xxxxx
+
+
+GIVE GKE ABILITY TO READ GCS BUCKET:
+gcloud projects add-iam-policy-binding strategic-kite-441305-c8 --member="serviceAccount:560212336725-compute@developer.gserviceaccount.com" --role="roles/storage.objectViewer"
+
+
+
+
+gcloud run deploy pgrts119/flask_app-fuse:latest --image gcr.io/strategic-kite-441305-c8/pgrts119/flask_app-fuse:latest --platform managed --region us-central1 --allow-unauthenticated
+1
+docker tag pgrts119/flaskapp-fuse:latest gcr.io/strategic-kite-441305-c8/pgrts119-flaskapp-fuse:latest
+
+2
+docker push gcr.io/strategic-kite-441305-c8/pgrts119-flaskapp-fuse:latest
+
+3
+gcloud run deploy flaskapp-fuse --image gcr.io/strategic-kite-441305-c8/pgrts119-flaskapp-fuse --platform managed --region us-central1 --allow-unauthenticated
+
+
+gcloud run deploy pgrts119/flask-app-fuse --image gcr.io/strategic-kite-441305-c8/pgrts119/flask-app-fuse --platform managed --region us-central1 --allow-unauthenticated
+
+gcloud run deploy flaskapp-fuse --image gcr.io/strategic-kite-441305-c8/pgrts119-flaskapp-fuse --platform managed --region us-central1 --allow-unauthenticated
+
+
+docker image tag disk_test:latest pgrts119/disk_test:latest
+docker tag pgrts119/flaskappdisk:latest gcr.io/strategic-kite-441305-c8/flaskappdisk:latest
+docker push gcr.io/strategic-kite-441305-c8/flaskappdisk:latest
+
+
+gcloud compute disks create my-disk --size=1GB --zone=us-central1-a
+
+https://www.googleapis.com/compute/v1/projects/strategic-kite-441305-c8/zones/us-central1-a/disks/car-db-disk
+
+gcloud compute scp "C:\Users\pgrts\Desktop\python\car_proj\data\car_db.db" mitchag191@instance-20241208-064841
+
+gcloud compute instances describe instance-20241208-064841 --zone us-central1-a --format="get(disks)"

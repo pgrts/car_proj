@@ -6,3 +6,4 @@ table_backups/
 flask_app/venv/
 flask_app/venv-wsl/
 cb_models/
+flask_app/keys

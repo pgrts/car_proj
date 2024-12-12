@@ -9,8 +9,23 @@
         <p><strong class="subheading-title">Used Car Market Data Dashboard</strong> <br>An evolving data platform that tracks new vehicle listings on Craigslist. Updated daily, it monitors price fluctuations and offers detailed analysis of regional and time-series differences across a growing database of vehicles. Discover insights and trends in real-time as you explore the data.</p>
     </div>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.css">
-    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+<!-- jQuery (make sure it's loaded before other scripts) -->
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+<!-- DataTables main JS -->
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+<!-- Moment.js (loaded after jQuery) -->
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/moment.min.js?v=1"></script>
+
+<!-- DataTables datetime sorting plugin (loaded after Moment.js) -->
+<script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/plug-ins/1.11.5/sorting/datetime-moment.js?v=1"></script>
+
+<!-- CHART JS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
     <style>
         /* Basic reset for margin and padding */
         * {
@@ -76,18 +91,16 @@
     color: #004d7f;
     margin-bottom: 10px;
 }
-
-        /* Container styling for centering and maximum width */
-        .container {
-            max-width: 1200px;
-            width: 100%;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #fff;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-        }
-
+.container {
+    max-width: 100%; /* Allow full width on small devices */
+    width: 90%; /* Add some padding from the edges */
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #fff;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    align-items: center;
+    border-radius: 8px;
+}
 
     /* Table styling */
     #vehicleTable {
@@ -104,7 +117,7 @@
         word-wrap: break-word;  /* Breaks long words to wrap */
         overflow: hidden;    /* Ensure no overflow within cells */
         text-overflow: ellipsis; /* Add ellipsis if text overflows */
-        max-width: 40px;       /* Set maximum width per cell */
+        max-width: 45px;       /* Set maximum width per cell */
     }
 
     #vehicleTable th {
@@ -117,6 +130,11 @@
         padding: 2px;
         white-space: nowrap;  /* Allow text to wrap normally in cells */
         font-size: 12px
+    }
+    /* Target the 14th column header */
+    #vehicleTable th:nth-child(14),
+    #vehicleTable th:nth-child(17)  {
+        font-size: 11px; /* Smaller text for the 14th column header */
     }
 
         /* Style for the header */
@@ -136,6 +154,11 @@
         /* Style for the form elements */
         form {
             margin-bottom: 30px;
+        }
+
+        .comparisonChart {
+            width: 800px; /* Full width of the parent container */
+            height: 400px; /* Maintain aspect ratio */
         }
 
         .removeRow {
@@ -179,10 +202,15 @@
     
         /* Styling for dynamic results area */
         #dynamicResults {
-            margin-top: 20px;
-            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
         }
-    
+        #dynamicResults2 {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
         /* Styling for error messages */
         .error {
             color: #ff3333;
@@ -228,7 +256,11 @@
         font-style: italic;
         font-size: 0.9em;
     }
-    
+    .chart-container {
+    position: relative;
+    width: 100%; /* Make it fill the container */
+    height: 100%; /* Let height be managed by aspect ratio */
+    }
         /* Table container styling (if needed) */
         #tableContainer {
             margin-top: 30px;
@@ -254,12 +286,36 @@
         #vehicleModelTool.clickable-header:active {
             background-color: #004085;
         }
-
+        #vinTable {
+    width: 100%; /* Make the table responsive */
+    max-width: 100%; /* Prevent the table from exceeding the container */
+    table-layout: auto; /* Allow dynamic column widths */
+    overflow-x: auto; /* Enable horizontal scrolling if needed */
+    word-wrap: break-word; /* Ensure long text wraps */
+    border-collapse: collapse; /* Prevent gaps between table cells */
+    margin: 0 auto; /* Center the table */
+}
+#vinTable td, #vinTable th {
+    word-wrap: break-word; /* Break long words */
+    overflow: hidden; /* Hide overflow */
+    text-overflow: ellipsis; /* Add "..." for clipped text */
+    max-width: 150px; /* Optional: Limit the width of each cell */
+}
         /* Media queries for responsiveness */
         @media (max-width: 768px) {
             .container {
-                padding: 15px;
+                padding: 10px;
             }
+            #vinTable {
+        font-size: 12px; /* Reduce font size for smaller screens */
+    }
+    .table-container {
+        overflow-x: auto; /* Allow horizontal scrolling */
+    }
+            .chart-container {
+            max-width: 100%; /* Let the chart fill the screen width */
+            height: auto; /* Maintain aspect ratio */
+        }
     
             input[type="text"] {
                 width: 100%;
@@ -273,6 +329,9 @@
             h1 {
                 font-size: 2em;
             }
+            .subheading {
+        font-size: 0.9em;
+    }
         }
     </style>    
 </head>
@@ -295,18 +354,22 @@
         </form>
 
         <!-- Dynamic results will be loaded here -->
-        <div id="dynamicResults">
-            <!-- Placeholder for search-specific content (tables/images) -->
-        </div>
-        
-        <!-- Dynamic results will be loaded here -->
         <div id="dynamicResults2">
             <!-- Placeholder for search-specific content (tables/images) -->
         </div>
 
+        <!-- Dynamic results will be loaded here -->
+        <div id="dynamicResults">
+            <div class="chart-container">
+                <canvas id="comparisonChart"  width="800" height="400"></canvas>
+            </div>
+            <!-- Placeholder for search-specific content (tables/images) -->
+        </div>
+        
+
         <!-- Always-loaded table.html content -->
         <div id="tableContainer">
-            {% include 'tables_nostate.html' %}
+            {% include 'tables.html' %}
         </div>
     </div>
 
@@ -317,14 +380,104 @@
             <a href="https://www.linkedin.com/in/mitchell-gallagher-pg1" target="_blank" rel="noopener noreferrer">LinkedIn</a> | 
             <a href="mailto:pgrtspgrtson@gmail.com">Email</a>
         </p>
-        <p>Contact me: <strong>Mitchell Gallagher</strong> | Discord: <strong>178999578002063361</strong></p>
-
         <p>If you would like to collaborate on any projects, feel free to reach out!</p>
     </footer>
     
 
 
     <script>
+
+    let chartInstance = null;
+    document.addEventListener('DOMContentLoaded', function() {
+    // Ensure DOM is fully loaded
+    console.log("DOM fully loaded and parsed");
+
+    // Check if the canvas element is correctly referenced
+    const canvas = document.getElementById('comparisonChart');
+    if (!canvas) {
+        console.error("Canvas element with id 'comparisonChart' not found");
+        return;
+    }
+
+    // Get the canvas context
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        console.error("Failed to get 2D context for the canvas");
+        return;
+    }
+
+    console.log("Canvas and context loaded successfully");
+
+    // Define the static data
+    const staticData = {
+        labels: [0, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 225000, 250000, 275000, 300000],
+        datasets: [{
+            label: '1998 JEEP Wrangler Sahara/TJ',
+            data: [21139, 21139, 15920, 12776, 10683, 9840, 9107, 8740, 8343, 7740, 6899, 6899, 6899],
+            fill: false,
+            borderColor: 'rgb(255, 99, 132)',  // Red color for the first line
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            tension: 0.1
+        }, {
+            label: '2001 MAZDA Tribute LX',
+            data: [13641, 13641, 9727, 7611, 6027, 5408, 4756, 4051, 3336, 2887, 2645, 2645, 2645],
+            fill: false,
+            borderColor: 'rgb(54, 162, 235)',  // Blue color for the second line
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            tension: 0.1
+        }, {
+            label: '1999 JEEP Cherokee Sport/Classic',
+            data: [18149, 18149, 15669, 13396, 11842, 9902, 8668, 7762, 7000, 6365, 5830, 5830, 5830],
+            fill: false,
+            borderColor: 'rgb(75, 192, 192)',  // Green color for the third line
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            tension: 0.1
+        }, {
+            label: '1999 LEXUS RX MCU10L/MCU15L 300',
+            data: [14661, 14661, 12452, 10264, 8756, 7232, 6228, 5472, 4899, 4653, 4310, 4310, 4310],
+            fill: false,
+            borderColor: 'rgb(153, 102, 255)',  // Purple color for the fourth line
+            backgroundColor: 'rgba(153, 102, 255, 0.2)',
+            tension: 0.1
+        }]
+    };
+
+    // Destroy the previous chart if it exists
+    if (chartInstance) {
+        chartInstance.destroy(); // Destroy the previous chart before creating a new one
+    }
+
+    // Initialize the chart with the static data
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: staticData,  // Use the static data here
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Price Prediction Chart'
+                }
+            },
+            scales: {
+                x: { 
+                    title: { 
+                        display: true, 
+                        text: 'Odometer (miles)' 
+                    }
+                },
+                y: { 
+                    title: { 
+                        display: true, 
+                        text: 'Price ($)' 
+                    }
+                }
+            }
+        }
+    });
+});
+
 $('#vehicleModelTool').click(function () {
     $.get('/vehicle_tool', function (data) {
         // Insert the table HTML into the toolContainer
@@ -511,13 +664,15 @@ function addRow(options, selectedValues = {}) {
         !days_since || days_since === 'Select' ||
         !odometer || odometer === 'Select'
     ) {
-    alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.");
+        $('.predict, .compare').prop('disabled', false)
+    alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.")
         return;
     }
 
     // Validate if days_since and odometer are integers
     if (isNaN(days_since) || isNaN(odometer) || days_since < 0 || odometer < 0) {
-        alert("Please enter valid integers for 'Days Since' and 'Odometer'.");
+        $('.predict, .compare').prop('disabled', false)
+        alert("Please enter valid integers for 'Days Since' and 'Odometer'.")
         return;
     }
 
@@ -552,19 +707,21 @@ function addRow(options, selectedValues = {}) {
                 row.find('.predictedprice').text(formattedPrice);
             },
             error: function () {
-                alert('Error predicting price. Please try again.');
-                
+                $('.predict, .compare').prop('disabled', false)
+                alert('Error predicting price. Please try again.')
             },
             complete: function () {
             // Re-enable both buttons after the request is completed
-            $('.predict, .compare').prop('disabled', false);
+            $('.predict, .compare').prop('disabled', false)
         }
             
         });
 });
+
 // New compare button AJAX request
 $('#vehicleTable').on('click', '.compare', function () {
     var row = $(this).closest('tr');
+    
     $('.predict, .compare').prop('disabled', true);
     // Get selected values from dropdowns and input fields (same as before)
     var make = row.find('.make').val();
@@ -601,13 +758,15 @@ $('#vehicleTable').on('click', '.compare', function () {
         !days_since || days_since === 'Select' ||
         !odometer || odometer === 'Select'
     ) {
-        alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.");
+        $('.predict, .compare').prop('disabled', false)
+        alert("Please make sure all dropdowns are selected and both 'Odometer' and 'Days Since' are filled out correctly.")
         return;
     }
 
     // Validate if days_since and odometer are integers
     if (isNaN(days_since) || isNaN(odometer) || days_since < 0 || odometer < 0) {
-        alert("Please enter valid integers for 'Days Since' and 'Odometer'.");
+        $('.predict, .compare').prop('disabled', false)
+        alert("Please enter valid integers for 'Days Since' and 'Odometer'.")
         return;
     }
 
@@ -629,30 +788,80 @@ $('#vehicleTable').on('click', '.compare', function () {
         days_since: days_since,
         odometer: odometer
     };
-    console.log("Data for prediction:", data2);
-    // AJAX request to /predict_price with make_pred set to false for comparison
+    console.log("Data for comparison:", data2);
+
+    // AJAX request to /compare_price for comparison
     $.ajax({
         url: '/compare_price',
         method: 'POST',
-        data: data2,
+        contentType: 'application/json',
+        data: JSON.stringify(data2),
         success: function(response) {
-            // Handle success response
-            console.log('Comparison successful:', response);
-            // Insert plot or table into the page
-            if (response.plot_img) {
-                const plotImage = `<img src="data:image/png;base64,${response.plot_img}" alt="Generated Plot" />`;
-                document.getElementById('dynamicResults').innerHTML = plotImage;
+
+             $('#dynamicResults').html('');
+            $('#dynamicResults').append('<div class="chart-container"><canvas id="comparisonChart"></canvas></div>');
+
+            // Explicitly set the canvas size after it's appended
+            var canvas = document.getElementById('comparisonChart');
+
+            canvas.offsetHeight;
+            canvas.width = 800;  // Use CSS for width
+            canvas.height = 400;  // Use CSS for height
+
+
+             // Destroy previous chart if it exists
+            if (chartInstance) {
+                chartInstance.destroy(); // Destroy the previous chart before creating a new one
             }
-            if (response.html_table) {
-                document.getElementById('dynamicResults').innerHTML += response.html_table;
+
+
+            const chartData = response.chart_data;  // Correctly access chart_data from response
+            console.log(chartData);  // Debugging to check chart_data
+
+            console.log('Labels:', chartData.labels);  // Correct reference to chart data
+            console.log('Datasets:', chartData.datasets);  // Correct reference to chart data
+                
+            // Prepare Chart.js chart with received data
+            var ctx = document.getElementById('comparisonChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: chartData.labels,  // Set the x-axis labels
+        datasets: chartData.datasets  // Use the datasets array directly
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            title: {
+                display: true,
+                text: 'Price Prediction Chart'
             }
+        },
+        scales: {
+            x: { 
+                title: { 
+                    display: true, 
+                    text: 'Odometer (miles)' 
+                }
+            },
+            y: { 
+                title: { 
+                    display: true, 
+                    text: 'Price ($)' 
+                }
+            }
+        }
+    }
+});
         },
         error: function() {
-            alert('Error during comparison. Please try again.');
-        },
+            $('.predict, .compare').prop('disabled', false)
+            alert('Error during comparison. Please try again.')
+        },            
         complete: function () {
-            // Re-enable both buttons after the request is completed
-            $('.predict, .compare').prop('disabled', false);
+        // Re-enable both buttons after the request is completed
+        $('.predict, .compare').prop('disabled', false);
         }
     });
 });
@@ -680,6 +889,7 @@ function fetchModels(make, row) {
             row.find('.model').html(models);
         },
         error: function (xhr, status, error) {
+            
             console.error('Error fetching models:', error);
         }
     });
@@ -790,142 +1000,198 @@ function fetchRegions(state, row) {
                 .then(response => response.json())  // Parse the response as JSON
                 .then(data => {
                     // Ensure only dynamicResults2 is updated
-                    document.getElementById('dynamicResults').innerHTML = ''; // Clear the other container
                     if (data.error) {
                         document.getElementById('dynamicResults2').innerHTML = `<p class="error">${data.error}</p>`;
                     } else {
                         document.getElementById('dynamicResults2').innerHTML = data.html;
-        
-                        // Dynamically update the form's action URL for form submission
-                        const form = document.getElementById('vehicle-selection-form');
-                        form.setAttribute('action', data.process_selection_url);  // Set the action URL
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            });
-        
-            // Handle Search by VIN
-            document.getElementById('searchVin').addEventListener('click', () => {
-                const vin = document.getElementById('vin').value.trim();
-        
-                if (!vin) {
-                    alert("Please enter a VIN.");
-                    return;
-                }
-        
-                fetch('/search_vin', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ vin: vin })
-                })
-                .then(response => response.json())  // Parse the response as JSON
-                .then(data => {
-                    if (data.error) {
-                        document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
-                    } else {
-                        // Update the dynamicResults div with the plot image
-                        if (data.plot_img) {
-                            const plotImage = `<img src="data:image/png;base64,${data.plot_img}" alt="Generated Plot" />`;
-                            document.getElementById('dynamicResults').innerHTML = plotImage;
-                        }
-        
-                        // Display the styled table if it's present in the response
-                        if (data.html_table) {
-                            // Insert the HTML table with styles into the page
-                            document.getElementById('dynamicResults').innerHTML += data.html_table;
-                        }
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            });
-        
-            // Event delegation to handle dynamically added buttons
-            document.addEventListener('click', function (event) {
-                if (event.target && event.target.classList.contains('select-button')) {
-                    const vin = event.target.getAttribute('data-vin');
-        
-                    fetch('/search_vin', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ vin: vin })
-                        })
-                        .then(response => response.json())  // Parse the response as JSON
-                        .then(data => {
-                            if (data.error) {
-                                document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
-                            } else {
-                                // Update the dynamicResults div with the plot image
-                                if (data.plot_img) {
-                                    const plotImage = `<img src="data:image/png;base64,${data.plot_img}" alt="Generated Plot" />`;
-                                    document.getElementById('dynamicResults').innerHTML = plotImage;
-                                }
-        
-                                // Display the styled table if it's present in the response
-                                if (data.html_table) {
-                                    // Insert the HTML table with styles into the page
-                                    document.getElementById('dynamicResults').innerHTML += data.html_table;
-                                }
-                            }
-                        })
-                    .catch(error => console.error('Error:', error));
-                }
-            });
-        
-            $(document).ready(function() {
-                // Delegate event for dynamically added elements (update-prediction)
-                $(document).on('click', '.update-prediction', function() {
-                    var rowIndex = $(this).data("row-index");
-                    var odometer = $("select[name='odometer'][data-row-index='" + rowIndex + "']").val();
-                    var paintColor = $("select[name='paint_color'][data-row-index='" + rowIndex + "']").val();
-                    var state = $("select[name='state'][data-row-index='" + rowIndex + "']").val();
-                    var condition = $("select[name='condition'][data-row-index='" + rowIndex + "']").val();
-        
-                    $.ajax({
-                        url: '/update_prediction',
-                        method: 'POST',
-                        contentType: 'application/json',
-                        data: JSON.stringify({
-                            index: rowIndex,
-                            odometer: odometer,
-                            paint_color: paintColor,
-                            state: state,
-                            condition: condition
-                        }),
-                        success: function(response) {
-                            if (response.success) {
-                                // Update the predicted price in the HTML
-                                $("span.predicted-price[data-row-index='" + rowIndex + "']").text(response.predicted_price);
-                            } else {
-                                alert("Error updating prediction: " + response.error);
-                            }
-                        },
-                        error: function() {
-                            alert("Error updating prediction.");
-                        }
-                    });
-                });
-        
-                // Delegate event for dynamically added elements (clone-button)
-                $(document).on('click', '.clone-button', function() {
-                    var newRow = $(this).closest('tr').clone();
-                    $('#dynamicResults').append(newRow);
-                });
-            });
 
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        
+// Event delegation to handle dynamically added 'select-button' elements
+document.addEventListener('click', function (event) {
+    // Check if the clicked element is a select-button
+    if (event.target && event.target.classList.contains('select-button')) {
+        const vin = event.target.getAttribute('data-vin');
+
+        // Make the POST request to '/search_vin' for the selected VIN
+        fetch('/search_vin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vin: vin })
+        })
+        .then(response => response.json())  // Parse the response as JSON
+        .then(data => {
             
+            // Handle response and update dynamicResults
+            if (data.error) {
+                document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
+            } else {
+                // Update with the chart data if available
+                if (data.chart_data) {
+
+                    $('#dynamicResults').html('');
+            $('#dynamicResults').append('<div class="chart-container"><canvas id="comparisonChart"></canvas></div>');
+
+            // Explicitly set the canvas size after it's appended
+            var canvas = document.getElementById('comparisonChart');
+
+            canvas.style.width = '800px';  // Use CSS for width
+            canvas.style.height = '400px';  // Use CSS for height
+
+            canvas.offsetHeight;
+
+            canvas.width = 800;  // Use CSS for width
+            canvas.height = 400;  // Use CSS for height
 
 
-document.querySelector('.subheading').addEventListener('click', clearDynamicContent);
+             // Destroy previous chart if it exists
+            // Destroy previous chart if it exists
+            if (chartInstance) {
+                chartInstance.destroy(); // Destroy the previous chart before creating a new one
+            }
+
+                const chartData = data.chart_data;
+                console.log(chartData);
+
+                console.log('Labels:', chartData.labels); // Correct reference to chart data
+                console.log('Datasets:', chartData.datasets); // Correct reference to chart data
+
+                const ctx = document.getElementById('comparisonChart').getContext('2d');    
+                chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: chartData.labels,  // Set the x-axis labels
+        datasets: chartData.datasets  // Use the datasets array directly
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            title: {
+                display: true,
+                text: 'Price Prediction Chart'
+            }
+        },
+        scales: {
+            x: { 
+                title: { 
+                    display: true, 
+                    text: 'Odometer (miles)' 
+                }
+            },
+            y: { 
+                title: { 
+                    display: true, 
+                    text: 'Price ($)' 
+                }
+            }
+        }
+    }
+});
+            }
+        }
+    })
+    .catch(error => console.error('Error:', error));
+    }
+});
+
+// Specifically handle the click on the 'searchVin' button to trigger a VIN search
+document.getElementById('searchVin').addEventListener('click', function () {
+    // Get the VIN from a relevant input field or data source
+    const vin = document.getElementById('vin').value;  // Example input ID, adjust as needed
+
+    // Make the POST request to '/search_vin' with the VIN value
+    fetch('/search_vin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vin: vin })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Handle response and update dynamicResults
+        if (data.error) {
+            document.getElementById('dynamicResults').innerHTML = `<p class="error">${data.error}</p>`;
+        } else {
+            // Update with the chart data if available
+            if (data.chart_data) {
+
+                $('#dynamicResults').html('');
+            $('#dynamicResults').append('<div class="chart-container"><canvas id="comparisonChart"></canvas></div>');
+
+            // Explicitly set the canvas size after it's appended
+            var canvas = document.getElementById('comparisonChart');
+
+            canvas.style.width = '800px';  // Use CSS for width
+            canvas.style.height = '400px';  // Use CSS for height
+            canvas.offsetHeight;
+            canvas.width = 800;  // Use CSS for width
+            canvas.height = 400;  // Use CSS for height
+
+             // Destroy previous chart if it exists
+            if (chartInstance) {
+                chartInstance.destroy(); // Destroy the previous chart before creating a new one
+            }
+
+                const chartData = data.chart_data;
+                console.log(chartData);
+
+                console.log('Labels:', chartData.labels); // Correct reference to chart data
+                console.log('Datasets:', chartData.datasets); // Correct reference to chart data
+
+                const ctx = document.getElementById('comparisonChart').getContext('2d');
+                chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: chartData.labels,  // Set the x-axis labels
+        datasets: chartData.datasets  // Use the datasets array directly
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            title: {
+                display: true,
+                text: 'Price Prediction Chart'
+            }
+        },
+        scales: {
+            x: { 
+                title: { 
+                    display: true, 
+                    text: 'Odometer (miles)' 
+                }
+            },
+            y: { 
+                title: { 
+                    display: true, 
+                    text: 'Price ($)' 
+                }
+            }
+        }
+    }
+});
+            }
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+
+
+    document.querySelector('.subheading').addEventListener('click', clearDynamicContent);
 
     function clearDynamicContent(event) {
         // Prevent any default link behavior if the target is a link (optional)
         event.preventDefault();
 
         // Clear content of the dynamic result divs
-        document.getElementById('dynamicResults').innerHTML = '';
         document.getElementById('dynamicResults2').innerHTML = '';
-}
-        </script>
+    }
+    
+</script>
         
 </body>
 </html>

@@ -184,7 +184,7 @@ def batch_vin(vin_input):
     r = requests.post(url, data=post_fields)
     vin_return = json.loads(r.text)
     return pd.DataFrame(vin_return['Results'])
-
+    
 def clean_vin_output(df):
     # Replace empty strings with 'nan' (if you want actual NaNs, use np.nan instead of 'nan')
     df = df.replace('', 'nan')
@@ -301,27 +301,27 @@ def link_parser(link):
                 # Ensure we're only storing known fields
                 if labl in data:
                     data[labl] = valu
-                    
+                     
     data['title'] = title
     data['link'] = link
     
     ff = pd.DataFrame([data])
+
     return ff
 
 def clean_listing_output(df2, datestr):
     # Column renaming dictionary
     column_rename_dc = {
-        'VIN:': 'vin', 'condition:': 'condition', 'drive:': 'drive', 'fuel:': 'fuel',
+        'VIN:': 'vin', 'condition:': 'condition', 'drive:': 'drive', 'fuel:': 'fuel', # 'cylinders:' : 'cylinders', 
         'paint color:': 'paint_color', 'type:': 'type', 'transmission:': 'transmission',
         'title status:': 'title_status', 'odometer:': 'odometer'
     }
-
 
     # Rename and clean DataFrame
     df = df2.rename(columns=column_rename_dc).reset_index(drop=True)
     df = df.replace('', 'nan')
 
-    if 'odometer' in df and df['odometer'].dtype == 'object':
+    if 'odometer' in df.columns and df['odometer'].dtype == 'object':
         # Replace commas and handle non-numeric values
         df['odometer'] = df['odometer'].str.replace(',', '', regex=False)  # Remove commas
         
@@ -331,15 +331,16 @@ def clean_listing_output(df2, datestr):
         # Optionally, you can fill NaN values with a default value (e.g., -1 or 0) if needed
         df['odometer'] = df['odometer'].fillna(-1).astype(int)  # Replace NaNs with -1 and convert to int
 
+
     # Truncate VIN to 16 characters if longer, else mark for rejection if less than 16
     df['vin'] = df['vin'].str[:17]
-    
     df['date_scraped'] = datestr
 
     # Filter listings with valid VIN and odometer
     valid_df = df[(df['vin'].notnull()) & 
                   (df['vin'].str.len() == 17) & 
                   (df['odometer'].between(15000, 400000))]
+
     reject_df = df[~df.index.isin(valid_df.index)]  # Entries that don't meet criteria
 
     return valid_df, reject_df
@@ -582,7 +583,7 @@ def retrain_model(main_data, main_data_outliers, user='postgres', password=db_pa
 def abse(df, lb=-25000, ub=25000):
     return (df['error'] < lb) | (df['error'] > ub)
 
-def epm(df, lb=-0.75, ub=1.5):
+def epm(df, lb=-0.75, ub=1.25):
     return (df['error_percent'] < lb) | (df['error_percent'] > ub) 
 
 def create_preds(df, model, pred_col):
@@ -1405,9 +1406,76 @@ def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval
         row = result.fetchone()  # Fetch the first row of the result
         print(f"Number of rows in latest_listings: {row[0]}")
 
+    return True
 
+from google.cloud import storage
 
-datestr = '2024-12-02'
+def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
+    """Uploads a file to the GCS bucket."""
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+
+    blob.upload_from_filename(source_file_name)
+    print(f"File {source_file_name} uploaded to {bucket_name}/{destination_blob_name}.")
+
+def transfer_file_to_vm():
+    # Variables
+    local_file = "C:/Users/pgrts/Desktop/python/car_proj/data/car_db.db"  # Path to your local file
+    vm_name = "app-vm"  # Name of your Google Cloud VM (not used in SSH commands)
+    zone = "us-central1-a"  # Zone of your VM (not used in SSH commands)
+    remote_path = "/mnt/disks/gce-containers-mounts/gce-persistent-disks/car-db-disk/car_db.db"  # Destination on the VM
+    user = "mitchag191"  # SSH user
+    vm_ip = "34.136.95.169"  # Static IP of the VM
+    private_key_path = "C:/Users/pgrts/Desktop/gkey/google_compute_engine"  # Path to your private key
+
+    try:
+        # Backup the old file
+        print("Creating backup of the existing file on the VM...")
+        backup_command = f"sudo cp {remote_path} {remote_path}.bak"
+        result = subprocess.run(
+            ["ssh", "-i", private_key_path, f"{user}@{vm_ip}", backup_command],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print("Error during backup:")
+            print(result.stderr)
+            return
+        print("Backup successful.")
+
+        # File Transfer using scp
+        print("Transferring file to VM...")
+        result = subprocess.run(
+            ["scp", "-i", private_key_path, local_file, f"{user}@{vm_ip}:{remote_path}"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print("Error during file transfer:")
+            print(result.stderr)
+            return
+        print("File transfer successful.")
+
+        # Verify the Transfer
+        print("Verifying the transferred file on the remote VM...")
+        verify_command = f"ls -lh {remote_path}"
+        result = subprocess.run(
+            ["ssh", "-i", private_key_path, f"{user}@{vm_ip}", verify_command],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print("Error during verification:")
+            print(result.stderr)
+            return
+        print("File verification complete:")
+        print(result.stdout)
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+datestr = '2024-12-10'
 datestr_sql = '_' + datestr.replace('-', '_')
 source_db_url = f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars'
 backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'
@@ -1416,7 +1484,7 @@ engine = create_engine(source_db_url)
 
 main_data = 'car_test'
 
-db_path = os.path.abspath('../flask_app/data/car_db.db')  # Adjust '../' if more levels are needed
+db_path = os.path.abspath('../data/car_db.db')  # Adjust '../' if more levels are needed
 seql_engine = create_engine(f'sqlite:///{db_path}')
 
 
@@ -1433,9 +1501,10 @@ if do_lots_stuff(main_data, datestr, engine):
         print('reject complete')
         if dump_backup(substring=datestr_sql, delete_after_backup=True):
             print('backup dumped')
-            update_sqlite(engine, seql_engine, pred_col = pred_cols[-1], main_table='car_test')
-            print('sqlite update')
-
+            if update_sqlite(engine, seql_engine, pred_col = pred_cols[-1], main_table='car_test'):
+                print('sqlite update')
+                transfer_file_to_vm()
+'''
 def restore_all_dumps(substring, user='postgres', password=db_password, host='localhost', port='5432', db_name='cars'):
     # Backup directory based on substring
     backup_dir = os.path.abspath(os.path.join(os.getcwd(), '..', 'table_backups', substring))
@@ -1481,7 +1550,7 @@ def restore_all_dumps(substring, user='postgres', password=db_password, host='lo
     print("Restoration process completed.")
 
 
-'''    
+   
 backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'
 backup_zip_path = f'C:\\Users\\pgrts\\Desktop\\python\\car_proj\\scraper\\backup{datestr}.zip'
 if backup_and_cleanup_database(source_db_url, backup_db_url):

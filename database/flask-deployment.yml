@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-web
+  template:
+    metadata:
+      labels:
+        app: flask-web
+    spec:
+      containers:
+      - name: flask-app
+        image: pgrts119/craigs_cars:craig_v1 # Replace with your image
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: flask-data-volume
+          mountPath: /app/data  # Mount DB in container
+        env:
+        - name: FLASK_APP
+          value: "app.py"
+      volumes:
+      - name: flask-data-volume
+        persistentVolumeClaim:
+          claimName: flask-app-pvc

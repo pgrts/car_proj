@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: update-db-job
+spec:
+  schedule: "0 2 * * *"  # Every day at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: update-db
+            image: python:3.9  # Or use your custom update image
+            command: ["python", "/app/update_script.py"]
+            volumeMounts:
+            - name: flask-data-volume
+              mountPath: /app/data
+          restartPolicy: OnFailure
+          volumes:
+          - name: flask-data-volume
+            persistentVolumeClaim:
+              claimName: flask-app-pvc

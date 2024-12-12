@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../scraper"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "flask_app"
+	}
+}

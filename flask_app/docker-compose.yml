@@ -1,30 +1,23 @@
 services:
   web:
     build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: flasky3
-    expose:
-      - "8000"  # Expose Gunicorn's port inside the container
+      context: .  # Build from the current directory
+      dockerfile: Dockerfile  # Use the specified Dockerfile
+    container_name: pgrtson1
+    image: pgrts119/flaskappdisk:latest
+    pull_policy: always    
     volumes:
-      - cbm_volume:/app/cbm        # Mount cbm volume to /app/cbm inside the container
-      - data_volume:/app/data      # Mount data volume to /app/data inside the container
-    environment:
-      - FLASK_APP=app.py 
-    # No need to add depends_on here since Nginx doesn't depend on the web service.
-    # Nginx will reach out to web after it's up.
-
-  nginx:
-    image: nginx:alpine
-    container_name: nginx
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf  # Nginx config file
-      - .:/app  # Mount the app code so Nginx can access it for static filesdocker-compose logs flask_app
+      - /mnt/disks/gce-containers-mounts/gce-persistent-disks/car-db-disk:/app/data  # Mount car-db-disk to /app/data
+      - /mnt/disks/gce-containers-mounts/gce-persistent-disks/model-disk:/app/cbm   # Mount model-disk to /app/cbm
     ports:
-      - "80:80"  # Expose Nginx on port 80
-    depends_on:
-      - web  # Make sure Nginx waits for the Flask app to be ready
+      - "80:80"  # Expose Nginx port
+      - "8080:8080"  # Expose Gunicorn port for debugging/internal testing
+    environment:
+      - FLASK_APP=app.py
+      - GOOGLE_APPLICATION_CREDENTIALS=/home/mitchag191/strategic-kite-441305-c8-e1facc654573.json
+    networks:
+      - app-network
 
-volumes:
-  cbm_volume: {}  # Named volume for the cbm folder
-  data_volume: {} # Named volume for the data folder
+networks:
+  app-network:
+    driver: bridge
