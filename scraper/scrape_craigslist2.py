@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import subprocess
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import time 
 
 from catboost import CatBoostRegressor
@@ -339,7 +339,7 @@ def clean_listing_output(df2, datestr):
     # Filter listings with valid VIN and odometer
     valid_df = df[(df['vin'].notnull()) & 
                   (df['vin'].str.len() == 17) & 
-                  (df['odometer'].between(15000, 400000))]
+                  (df['odometer'].between(5000, 425000))]
 
     reject_df = df[~df.index.isin(valid_df.index)]  # Entries that don't meet criteria
 
@@ -353,15 +353,6 @@ def posting_date(df):
     df['reference_date'] = reference_date
     return df
 
-def find_price_diffs(scraped_links, big_rej_df):
-    merged_df = pd.merge(scraped_links, big_rej_df, on='link', suffixes=('_scraped', '_rejected'))
-
-    # Filter rows where prices are different
-    price_diff_df = merged_df[merged_df['price_scraped'] != merged_df['price_rejected']]
-
-    # Get the indices from scraped_links where prices are different
-    return price_diff_df.index    
-
 # use match_col to identify matches on that column BUT find price changes. rejects if price is the same AND vin (or link or match_col) is the same. 
 def filter_and_reject(valid_df, reject_df, data_df, match_col='vin', use_odo=False):
 
@@ -369,12 +360,9 @@ def filter_and_reject(valid_df, reject_df, data_df, match_col='vin', use_odo=Fal
         all_cols = [match_col, 'price', 'odometer']
     else:
         all_cols = [match_col, 'price']
+
     # Check for exact matches in 'vin' and 'price' between valid_df and data_df
-    matches = valid_df.merge(
-        data_df[all_cols], 
-        on=all_cols, 
-        how='inner'
-    )
+    matches = valid_df.merge(data_df[all_cols], on=all_cols, how='inner')
     
     # Remove matching rows from valid_df
     valid_df = valid_df[~valid_df[match_col].isin(matches[match_col])]
@@ -580,10 +568,10 @@ def retrain_model(main_data, main_data_outliers, user='postgres', password=db_pa
             
             prep_cd_sql(df, mod_ints, mod_floats, mod_texts).to_sql(table, engine, index=False, if_exists='replace')  
 
-def abse(df, lb=-25000, ub=25000):
+def abse(df, lb=-50000, ub=50000):
     return (df['error'] < lb) | (df['error'] > ub)
 
-def epm(df, lb=-0.75, ub=1.25):
+def epm(df, lb=-1, ub=2):
     return (df['error_percent'] < lb) | (df['error_percent'] > ub) 
 
 def create_preds(df, model, pred_col):
@@ -722,7 +710,7 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
             if table_exists_engine(links_accepted, engine):
                 print(f'{links_accepted} exists. Skipping split')
             else:
-                df1, df2 = clean_mask_price(full_scrape, 1000, 175000)
+                df1, df2 = clean_mask_price(full_scrape, 1000, 200000)
 
                 if df1.empty or df2.empty:
                     print("Error: The DataFrame (df1 or df2) is empty.")
@@ -732,7 +720,7 @@ def do_lots_stuff(main_data, datestr, engine, reg_ref = 'region_reference', big_
                 try:
                     scraped_links, reject_links = filter_and_reject(df1, df2, backup_df[['link', 'price', 'odometer']], match_col='link')
                 except:
-                    print('filter adn reject fail')
+                    print('filter and reject fail')
 
                 if scraped_links.empty or reject_links.empty:
                     print("Error: The DataFrame (scraped_links or reject_links) is empty.")
@@ -1201,21 +1189,7 @@ def model_prep(df2):
     df2[cats] = df2[cats].astype(str)
     df2[nums] = df2[nums].astype('float64')
     return df2
-
-def rmse(df, pred_col):
-    return root_mean_squared_error(df[pred_col], df['price'])
-
-def get_first(ls):
-    if (len(ls) == 1):
-        return ls[0]
-    else: 
-        return get_first(list(set(ls)))
-
-def detect_down_payments(df, pred_col, mult = 1.5, add=1500):
-    #(df.odometer < 250000) & (df['modelyear'] > 2000) & (df['price'] < 10000) & 
-    down_payments_likely = (df[pred_col] > ((mult * df['price']) + add))
-    return df[~down_payments_likely], df[down_payments_likely]
-    
+   
 def dump_backup(substring, user='postgres', password=db_password, host='localhost', port='5432', db_name='cars', delete_after_backup=False):
 
     backup_dir = os.path.abspath(os.path.join(os.getcwd(), '..', 'table_backups',substring))
@@ -1264,6 +1238,15 @@ def dump_backup(substring, user='postgres', password=db_password, host='localhos
     return True
 
 def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval=2):
+    
+
+    X_days = interval*5 # 10 days
+    cutoff_date = date.today() - timedelta(days=X_days)
+
+    # Convert the cutoff_date to a string in the required format (e.g., 'YYYY-MM-DD')
+    cutoff_date_str = cutoff_date.strftime('%Y-%m-%d')
+
+
     listings_query = text(f'''
 
     WITH latest_data AS (WITH ranked_data AS (
@@ -1286,7 +1269,7 @@ def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval
 
     ORDER BY residual DESC
 ''')
-    price_change_query = text(f'''SELECT DISTINCT 
+    price_change_query = text(f'''SELECT DISTINCT ON (n.vin, n.price, b.price, n.posting_date)
         n.state,
         n.odometer as "new_odometer",
         b.odometer as "old_odometer",
@@ -1294,37 +1277,16 @@ def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval
         n.model, 
         n.modelyear, 
         n.{pred_col} as "predicted_price",
-        -- Ensure that new_price is always the later price (higher posting_date)
-        CASE 
-            WHEN n.posting_date > b.posting_date THEN n.price 
-            ELSE b.price
-        END AS "new_price", 
-        -- Ensure that old_price is always the earlier price (older posting_date)
-        CASE 
-            WHEN n.posting_date > b.posting_date THEN b.price
-            ELSE n.price
-        END AS "old_price", 
-        -- Ensure that new_posting_date is the later posting_date
-        CASE 
-            WHEN n.posting_date > b.posting_date THEN n.posting_date
-            ELSE b.posting_date
-        END AS "new_posting_date", 
-        -- Ensure that old_posting_date is the earlier posting_date
-        CASE 
-            WHEN n.posting_date > b.posting_date THEN b.posting_date
-            ELSE n.posting_date
-        END AS "old_posting_date",
         n.vin, 
         n.link AS "new_link", 
         b.link AS "old_link",
+        n.price AS "new_price", 
+        b.price AS "old_price", 
+        n.posting_date AS "new_posting_date", 
+        b.posting_date AS "old_posting_date",
         n.date_scraped AS "new_date_scraped",
         b.date_scraped AS "old_date_scraped",
-        -- Adjust price_drop calculation based on the ordering of price and dates
-        CASE 
-            WHEN n.date_scraped > b.date_scraped THEN n.price - b.price
-            WHEN b.date_scraped > n.date_scraped THEN b.price - n.price
-            ELSE 0
-        END AS price_drop,
+        n.price - b.price AS price_drop,
         n.series, 
         n.trim,
         n.drivetype,
@@ -1332,25 +1294,26 @@ def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval
         n.enginecylinders
     FROM {main_table} n
     JOIN {main_table} b ON n.vin = b.vin
-    WHERE n.price != b.price
-    AND n.posting_date > b.posting_date
-    AND LENGTH (n.vin) = 17
+        WHERE n.price != b.price
+        AND n.posting_date > b.posting_date
+        AND LENGTH (n.vin) = 17
+        AND n.posting_date >= '{cutoff_date_str}' -- Ensure new_posting_date is within the past X days        
     ORDER BY "new_posting_date" DESC
     ''')
       
     with engine.connect() as conn:
         price_df = pd.read_sql(price_change_query, conn)
         car_test_df = pd.read_sql_query(text(f"select * FROM car_test"), conn)[cats+nums+['vin']]
-        current_unique_veh = pd.read_sql_query(text(f"select * FROM unique_vehicles_current"), conn)[cats+nums+['vin']]
         list_df = pd.read_sql(listings_query, conn)
     vin_cols = [x for x in car_test_df.columns if x not in
     ['drive', 'link', 'price', 'odometer', 'days_since', 'state', 'region', 'state_income', 'condition', 
     'paint_color', 'title', 'link', 'location', 'drive', 'type', 'title_status', 'transmission', 'fuel', 'region_url', 'geo_placename',
     'reference_date', 'date_scraped', 'vin', 'posting_date', 'car_id'] + pred_cols]
 
-    distinct_veh = car_test_df.drop_duplicates(subset=vin_cols)[cats+nums+['vin']]
+    distinct_veh2 = car_test_df.drop_duplicates(subset=vin_cols)[cats+nums+['vin']]
 
-    distinct_veh2 = pd.concat([car_test_df[cats+nums+['vin']], distinct_veh]).drop_duplicates(subset=vin_cols)[cats+nums+['vin']]
+    # WTF IS THIS?
+    #distinct_veh2 = pd.concat([car_test_df[cats+nums+['vin']], distinct_veh]).drop_duplicates(subset=vin_cols)[cats+nums+['vin']]
 
     for num in nums:
         distinct_veh2[num] = distinct_veh2[num].apply(
@@ -1408,17 +1371,6 @@ def update_sqlite(engine, seql_engine, pred_col, main_table='car_test', interval
 
     return True
 
-from google.cloud import storage
-
-def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
-    """Uploads a file to the GCS bucket."""
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(destination_blob_name)
-
-    blob.upload_from_filename(source_file_name)
-    print(f"File {source_file_name} uploaded to {bucket_name}/{destination_blob_name}.")
-
 def transfer_file_to_vm():
     # Variables
     local_file = "C:/Users/pgrts/Desktop/python/car_proj/data/car_db.db"  # Path to your local file
@@ -1475,16 +1427,16 @@ def transfer_file_to_vm():
     except Exception as e:
         print(f"An error occurred: {e}")
 
-datestr = '2024-12-10'
+datestr = '2024-12-17'
 datestr_sql = '_' + datestr.replace('-', '_')
 source_db_url = f'postgresql+psycopg2://postgres:{db_password}@localhost:5432/cars'
 backup_db_url = f'postgresql://postgres:{db_password}@localhost:5432/cars_backup'
-backup_zip_path = f'C:\\Users\\pgrts\\Desktop\\python\\car_proj\\scraper\\backup{datestr}.zip'
+
 engine = create_engine(source_db_url)
 
 main_data = 'car_test'
 
-db_path = os.path.abspath('../data/car_db.db')  # Adjust '../' if more levels are needed
+db_path = os.path.abspath('../data/car_db.db')  
 seql_engine = create_engine(f'sqlite:///{db_path}')
 
 

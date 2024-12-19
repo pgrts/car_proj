@@ -7,3 +7,6 @@ flask_app/venv/
 flask_app/venv-wsl/
 cb_models/
 flask_app/keys
+data/
+cbm/
+update_car_db.ps1
